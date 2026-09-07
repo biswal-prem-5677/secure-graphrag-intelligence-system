@@ -1,0 +1,2 @@
+{"id": "gen-01", "query": "What malware does PHANTOM DRAGON use?", "expected_claims": ["PHANTOM DRAGON uses DragonScale", "CERT Advisory 2022-041"], "refusal_expected": false}
+{"id": "gen-02", "query": "What is alien group Omega999?", "expected_claims": [], "refusal_expected": true}

@@ -1,0 +1,2 @@
+{"id": "conf-01", "query": "What malware does PHANTOM DRAGON use?", "expected_tier": "HIGH"}
+{"id": "conf-02", "query": "Tell me about UnknownGroup999", "expected_tier": "INSUFFICIENT"}

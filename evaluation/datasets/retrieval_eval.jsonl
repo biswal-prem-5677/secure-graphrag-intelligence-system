@@ -1,0 +1,3 @@
+{"id": "ret-01", "query": "PHANTOM DRAGON malware", "target_entities": ["PHANTOM DRAGON", "DragonScale", "Cobalt Strike"]}
+{"id": "ret-02", "query": "Operation Jade Storm target", "target_entities": ["Operation Jade Storm", "Apex Defense Corp"]}
+{"id": "ret-03", "query": "CVE-2023-38831", "target_entities": ["CVE-2023-38831", "PHANTOM DRAGON"]}

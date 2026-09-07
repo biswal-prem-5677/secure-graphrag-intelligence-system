@@ -1,0 +1,5 @@
+{"id": "task-01", "query": "What malware does PHANTOM DRAGON use?", "expected_entities": ["PHANTOM DRAGON", "DragonScale"], "expected_state": "TASK_COMPLETED", "expected_tier": "HIGH"}
+{"id": "task-02", "query": "What infrastructure is connected to PHANTOM DRAGON?", "expected_entities": ["PHANTOM DRAGON", "203.0.113.42"], "expected_state": "TASK_COMPLETED", "expected_tier": "HIGH"}
+{"id": "task-03", "query": "Which organizations has CRIMSON WOLF targeted?", "expected_entities": ["CRIMSON WOLF", "Apex Defense Corp", "Metro Health System"], "expected_state": "TASK_COMPLETED", "expected_tier": "HIGH"}
+{"id": "task-04", "query": "Tell me about non-existent alien syndicate Omega999", "expected_entities": [], "expected_state": "EMPTY_RETRIEVAL", "expected_tier": "INSUFFICIENT"}
+{"id": "task-05", "query": "bank", "expected_entities": [], "expected_state": "AMBIGUOUS_ENTITY", "expected_tier": "LOW"}
