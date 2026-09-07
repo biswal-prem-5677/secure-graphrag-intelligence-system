@@ -135,6 +135,55 @@ Acknowledges session logout for the authenticated user.
 
 ## Billing & Usage
 
-### `GET /api/v1/billing/usage`
-Retrieve current daily query quota, consumption, and tier status.
+### `GET /api/v1/billing/subscription`
+Retrieve current subscription tier, status, daily query count, and reset schedule.
+
+**Response (200 OK):**
+```json
+{
+  "user_id": "analyst",
+  "plan_tier": "free",
+  "status": "active",
+  "daily_count": 3,
+  "daily_limit": 20,
+  "resets_at": "2026-09-08T00:00:00Z",
+  "is_stripe_configured": false
+}
+```
+
+### `POST /api/v1/billing/create-checkout-session`
+Initiate Stripe Checkout session for Pro tier upgrade.
+
+---
+
+## Saved Investigations
+
+### `GET /api/v1/saved`
+List all saved investigations for the authenticated user.
+
+### `POST /api/v1/saved`
+Bookmark an investigation record (includes query, answer, graph data, and evidence).
+
+### `GET /api/v1/saved/{inv_id}`
+Retrieve a saved investigation by ID (strictly isolated to owner; returns 404 for other users).
+
+### `PUT /api/v1/saved/{inv_id}`
+Rename a saved investigation title.
+
+### `DELETE /api/v1/saved/{inv_id}`
+Delete a saved investigation (strictly isolated to owner; returns 404 for other users).
+
+---
+
+## Personalization & Memory
+
+### `GET /api/v1/memory`
+List active analyst preferences and contextual memories for current user.
+
+### `POST /api/v1/memory`
+Store or update key-value memory context for current user.
+
+### `DELETE /api/v1/memory/key/{key}`
+Remove a specific memory entry for current user.
+
 
