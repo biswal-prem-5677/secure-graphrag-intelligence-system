@@ -49,3 +49,16 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Recovery Scripts & Scratch Artifacts
+analyze_pyc.py
+core_modules_summary.json
+final_project/
+final_recovery/
+full_recovery.py
+generate_*.py
+pyc_analysis.json
+recover_blobs.py
+recovered_secure_graphrag/
+scratch_recover.py
+secure_graphrag/
