@@ -1,0 +1,11 @@
+from app.api.health import router as health_router
+from app.api.auth import router as auth_router
+from app.api.query import router as query_router
+from app.api.entities import router as entities_router
+from app.api.billing import router as billing_router
+from app.api.feedback import router as feedback_router
+from app.api.memory import router as memory_router
+from app.api.profile import router as profile_router
+from app.api.saved import router as saved_router
+from app.api.admin import router as admin_router
+from app.api.observability import router as observability_router
