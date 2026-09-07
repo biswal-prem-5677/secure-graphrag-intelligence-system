@@ -31,3 +31,42 @@ The **Secure GraphRAG Knowledge Intelligence System** implements a hybrid Graph-
 - Outputs are segmented into distinct factual assertions.
 - Claims are mapped back to source nodes in the retrieved subgraph.
 - Confidence score is computed as a weighted harmonic mean of path density, lexical overlap, and claim support.
+
+### 6. Persistent Relational Data Layer
+- **Database**: PostgreSQL 16 in production; SQLite for local development and CI (auto-detected via `DATABASE_URL`).
+- **ORM**: SQLAlchemy 2.0 declarative models with 8 tables: `users`, `profiles`, `user_memories`, `session_contexts`, `saved_investigations`, `user_usage`, `subscriptions`, `feedbacks`.
+- **Repository Pattern**: All database access is encapsulated in `backend/app/db/repository.py` with server-side `user_id` filtering on every query to enforce multi-tenant isolation.
+- **Schema Initialization**: `init_db()` is called during application lifespan startup, creating all tables via `Base.metadata.create_all()`.
+
+### 7. Multi-User Isolation & Authentication
+- **Public Registration**: `POST /api/v1/auth/register` creates user + profile + free subscription atomically.
+- **JWT Authentication**: Stateless HS256 tokens issued on login/register, validated via `get_current_user` dependency.
+- **Anti-IDOR Protection**: All user-scoped endpoints (saved investigations, memory, profiles, usage) enforce server-side ownership checks. User A cannot access, modify, or delete User B's data.
+- **Cache Isolation**: Query cache keys include `user_id` prefix to prevent cross-tenant result leakage.
+- **Session Context Isolation**: Composite unique constraint `(user_id, session_id)` ensures conversational context cannot bleed between users sharing a session identifier.
+
+---
+
+## Deployment Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Docker Compose                     │
+│                                                     │
+│  ┌───────────┐  ┌───────────┐  ┌──────────────────┐│
+│  │ PostgreSQL │  │  Neo4j    │  │  FastAPI Backend  ││
+│  │ (Users,   │  │ (Knowledge│  │  (GraphRAG +      ││
+│  │  State)   │  │  Graph)   │  │   LLM Engine)     ││
+│  └───────────┘  └───────────┘  └──────────────────┘│
+│                                                     │
+│  ┌──────────────────────────────────────────────────┤
+│  │  Next.js Frontend (Port 3000)                    │
+│  └──────────────────────────────────────────────────┤
+└─────────────────────────────────────────────────────┘
+```
+
+- **PostgreSQL**: User credentials, profiles, saved investigations, usage tracking, subscriptions, feedback (persistent relational state).
+- **Neo4j**: Knowledge graph with STIX 2.1 threat intelligence entities and relationships.
+- **FastAPI Backend**: GraphRAG engine, LLM orchestration, API endpoints, authentication.
+- **Next.js Frontend**: 15-route production UI with login, dashboard, billing, observability, and admin pages.
+

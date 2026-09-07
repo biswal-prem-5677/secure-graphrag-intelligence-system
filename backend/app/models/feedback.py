@@ -1,5 +1,5 @@
 """
-UserFeedback model and store for recording analyst quality ratings.
+UserFeedback model and persistent store for recording analyst quality ratings.
 """
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+from app.db.database import SessionLocal
+from app.db.models import DBFeedback
+from app.db.repository import FeedbackRepository
 
 
 class UserFeedbackCreate(BaseModel):
@@ -33,25 +36,45 @@ class QualityMetrics(BaseModel):
 
 
 class FeedbackStore:
-    """Thread-safe feedback store with admin aggregation."""
-
-    def __init__(self) -> None:
-        self._feedbacks: List[UserFeedback] = []
+    """Thread-safe persistent feedback store with admin aggregation."""
 
     def submit_feedback(self, feedback: UserFeedback) -> None:
-        self._feedbacks.append(feedback)
+        FeedbackRepository.create(
+            user_id=feedback.user_id,
+            query_id=feedback.query_id,
+            query=feedback.query,
+            rating=feedback.rating,
+            comment=feedback.comment,
+            is_hallucination=feedback.is_hallucination,
+            is_incomplete=feedback.is_incomplete,
+        )
 
     def list_feedback(self, limit: int = 100) -> List[UserFeedback]:
-        return sorted(self._feedbacks, key=lambda f: f.created_at, reverse=True)[:limit]
+        db_items = FeedbackRepository.list_all(limit=limit)
+        return [
+            UserFeedback(
+                id=f.id,
+                user_id=f.user_id,
+                query_id=f.query_id,
+                query=f.query,
+                rating=f.rating,
+                comment=f.comment,
+                is_hallucination=f.is_hallucination,
+                is_incomplete=f.is_incomplete,
+                created_at=f.created_at,
+            )
+            for f in db_items
+        ]
 
     def get_metrics(self) -> QualityMetrics:
-        if not self._feedbacks:
+        feedbacks = self.list_feedback(limit=1000)
+        if not feedbacks:
             return QualityMetrics()
-        total = len(self._feedbacks)
-        avg_rating = sum(f.rating for f in self._feedbacks) / total
-        hallucinations = sum(1 for f in self._feedbacks if f.is_hallucination)
-        incompletes = sum(1 for f in self._feedbacks if f.is_incomplete)
-        satisfied = sum(1 for f in self._feedbacks if f.rating >= 4)
+        total = len(feedbacks)
+        avg_rating = sum(f.rating for f in feedbacks) / total
+        hallucinations = sum(1 for f in feedbacks if f.is_hallucination)
+        incompletes = sum(1 for f in feedbacks if f.is_incomplete)
+        satisfied = sum(1 for f in feedbacks if f.rating >= 4)
         return QualityMetrics(
             total_feedback=total,
             average_rating=round(avg_rating, 2),

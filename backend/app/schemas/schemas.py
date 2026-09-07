@@ -66,6 +66,20 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=200)
 
 
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
+    password: str = Field(..., min_length=8, max_length=100)
+    email: Optional[str] = Field(default=None, max_length=255)
+
+
+class UserResponse(BaseModel):
+    id: Optional[str] = None
+    username: str
+    email: Optional[str] = None
+    role: str
+    disabled: bool = False
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "Bearer"

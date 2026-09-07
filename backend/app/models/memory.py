@@ -1,12 +1,14 @@
 """
-User personalization memory and session context store with user isolation and privacy controls.
+User personalization memory and session context store with database persistence and user isolation.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+from app.db.repository import MemoryRepository
 
 
 class UserMemoryItem(BaseModel):
@@ -27,55 +29,57 @@ class SessionContext(BaseModel):
 
 
 class UserMemoryStore:
-    """Thread-safe user memory store with user isolation and privacy deletion controls."""
-
-    def __init__(self) -> None:
-        self._memories: Dict[str, List[UserMemoryItem]] = {}
-        self._sessions: Dict[str, SessionContext] = {}
+    """Thread-safe persistent user memory store with user isolation and privacy controls."""
 
     def get_memories(self, user_id: str) -> List[UserMemoryItem]:
-        """Return all memories for user."""
-        return self._memories.get(user_id, [])
+        """Return all memories for user from database."""
+        db_mems = MemoryRepository.get_memories(user_id)
+        return [
+            UserMemoryItem(
+                id=m.id,
+                user_id=m.user_id,
+                key=m.key,
+                value=m.value,
+                category=m.category,
+                created_at=m.created_at,
+            )
+            for m in db_mems
+        ]
 
     def add_or_update_memory(self, user_id: str, key: str, value: str, category: str = "preference") -> UserMemoryItem:
-        items = self._memories.setdefault(user_id, [])
-        for it in items:
-            if it.key == key:
-                it.value = value
-                it.category = category
-                return it
-        new_item = UserMemoryItem(user_id=user_id, key=key, value=value, category=category)
-        items.append(new_item)
-        return new_item
+        db_mem = MemoryRepository.add_or_update(user_id, key, value, category)
+        return UserMemoryItem(
+            id=db_mem.id,
+            user_id=db_mem.user_id,
+            key=db_mem.key,
+            value=db_mem.value,
+            category=db_mem.category,
+            created_at=db_mem.created_at,
+        )
 
     def delete_memory(self, user_id: str, memory_id: str) -> bool:
-        items = self._memories.get(user_id, [])
-        orig_len = len(items)
-        self._memories[user_id] = [it for it in items if it.id != memory_id]
-        return len(self._memories[user_id]) < orig_len
+        return MemoryRepository.delete(user_id, memory_id)
 
     def clear_all_for_user(self, user_id: str) -> None:
         """GDPR Right-to-be-Forgotten full memory purge."""
-        self._memories.pop(user_id, None)
-        # Clear session contexts
-        keys_to_remove = [k for k, s in self._sessions.items() if s.user_id == user_id]
-        for k in keys_to_remove:
-            self._sessions.pop(k, None)
+        MemoryRepository.clear_all(user_id)
 
     def get_session_context(self, session_id: str, user_id: str) -> SessionContext:
-        ctx = self._sessions.get(session_id)
-        if not ctx or ctx.user_id != user_id:
-            ctx = SessionContext(session_id=session_id, user_id=user_id)
-            self._sessions[session_id] = ctx
-        return ctx
+        db_ctx = MemoryRepository.get_session_context(session_id, user_id)
+        try:
+            hist = json.loads(db_ctx.history_json) if db_ctx.history_json else []
+        except Exception:
+            hist = []
+        return SessionContext(
+            session_id=db_ctx.session_id,
+            user_id=db_ctx.user_id,
+            last_entity=db_ctx.last_entity,
+            last_query=db_ctx.last_query,
+            history=hist,
+        )
 
     def update_session_context(self, session_id: str, user_id: str, entity: Optional[str], query: str) -> None:
-        ctx = self.get_session_context(session_id, user_id)
-        if entity:
-            ctx.last_entity = entity
-        ctx.last_query = query
-        ctx.history.append(query)
-        self._sessions[session_id] = ctx
+        MemoryRepository.update_session_context(session_id, user_id, entity, query)
 
 
 memory_store = UserMemoryStore()

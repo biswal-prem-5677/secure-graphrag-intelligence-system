@@ -95,30 +95,50 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 def seed_default_users() -> None:
-    """Seed admin and analyst users into user_store if absent."""
+    """Seed admin and analyst users into user_store if enabled and absent."""
+    if not getattr(settings, "SEED_DEFAULT_USERS", True):
+        logger.info("seed_default_users_skipped_by_config")
+        return
+
+    try:
+        from app.db.database import init_db
+        init_db()
+    except Exception as e:
+        logger.warning("seed_default_users_init_db_error", error=str(e))
+        return
+
     admin_pw = settings.DEFAULT_ADMIN_PASSWORD
     user_pw = settings.DEFAULT_USER_PASSWORD
 
-    if not user_store.user_exists("admin"):
-        user_store.add_user(
-            User(
-                username="admin",
-                role=UserRole.admin,
-                hashed_password=hash_password(admin_pw),
-                disabled=False,
+    try:
+        if not user_store.user_exists("admin"):
+            user_store.add_user(
+                User(
+                    username="admin",
+                    role=UserRole.admin,
+                    hashed_password=hash_password(admin_pw),
+                    disabled=False,
+                )
             )
-        )
-        logger.info("default_admin_created")
+            logger.info("default_admin_created")
 
-    if not user_store.user_exists("analyst"):
-        user_store.add_user(
-            User(
-                username="analyst",
-                role=UserRole.analyst,
-                hashed_password=hash_password(user_pw),
-                disabled=False,
+        if not user_store.user_exists("analyst"):
+            user_store.add_user(
+                User(
+                    username="analyst",
+                    role=UserRole.analyst,
+                    hashed_password=hash_password(user_pw),
+                    disabled=False,
+                )
             )
-        )
-        logger.info("default_user_created")
+            logger.info("default_user_created")
+    except Exception as e:
+        logger.warning("seed_default_users_failed", error=str(e))
 
-seed_default_users()
+
+# Seed on import if database is available
+try:
+    seed_default_users()
+except Exception:
+    pass
+
