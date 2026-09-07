@@ -1,7 +1,26 @@
 version: "3.8"
 
 services:
-  # Neo4j Graph Database Service
+  # PostgreSQL Persistent Relational Database (Users, Profiles, Investigations, Memory, Usage, Subscriptions)
+  postgres:
+    image: postgres:16-alpine
+    container_name: secure-graphrag-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: graphrag
+      POSTGRES_PASSWORD: graphrag_secure_2024
+      POSTGRES_DB: secure_graphrag
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U graphrag -d secure_graphrag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j Graph Database Service (Knowledge Graph)
   neo4j:
     image: neo4j:5.20-community
     container_name: secure-graphrag-neo4j
@@ -33,15 +52,37 @@ services:
       - ENVIRONMENT=production
       - API_HOST=0.0.0.0
       - API_PORT=8000
+      - DATABASE_URL=postgresql://graphrag:graphrag_secure_2024@postgres:5432/secure_graphrag
       - LLM_PROVIDER=mock
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=graphrag_secure_2024
+      - JWT_SECRET_KEY=production-secure-graphrag-jwt-secret-key-replace-with-env
+      - JWT_EXPIRY_MINUTES=60
     depends_on:
+      postgres:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
     volumes:
       - ./backend:/app/backend:ro
 
+  # Secure GraphRAG Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: secure-graphrag-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_started
+
 volumes:
+  postgres_data:
   neo4j_data:

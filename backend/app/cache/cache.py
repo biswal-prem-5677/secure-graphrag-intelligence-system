@@ -31,7 +31,9 @@ class QueryCache:
 
     def _make_key(self, query: str, user_id: Optional[str] = None) -> str:
         norm = self.normalize_query(query)
-        return f"query:{norm}"
+        if user_id:
+            return f"query:{user_id}:{norm}"
+        return f"query:public:{norm}"
 
     def get(self, query: str, user_id: Optional[str] = None) -> Optional[Any]:
         """Lookup cached response for a query."""

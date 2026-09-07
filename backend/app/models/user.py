@@ -1,11 +1,12 @@
 """
-User model and in-memory user store for MVP and testing.
+User model and persistent user store with database backing.
 """
 from __future__ import annotations
 
 from enum import Enum
 from typing import Dict, List, Optional
 from pydantic import BaseModel
+from app.db.repository import UserRepository
 
 
 class UserRole(str, Enum):
@@ -19,25 +20,49 @@ class User(BaseModel):
     role: UserRole = UserRole.analyst
     hashed_password: str
     disabled: bool = False
+    email: Optional[str] = None
 
 
 class UserStore:
-    """Thread-safe in-memory store for users."""
-
-    def __init__(self) -> None:
-        self._users: Dict[str, User] = {}
+    """Persistent store for users with thread-safe database backing."""
 
     def add_user(self, user: User) -> None:
-        self._users[user.username] = user
+        existing = UserRepository.get_by_username(user.username)
+        if not existing:
+            UserRepository.create(
+                username=user.username,
+                hashed_password=user.hashed_password,
+                email=user.email,
+                role=user.role.value,
+            )
 
     def get_user(self, username: str) -> Optional[User]:
-        return self._users.get(username)
+        db_user = UserRepository.get_by_username(username)
+        if not db_user:
+            return None
+        return User(
+            username=db_user.username,
+            role=UserRole(db_user.role),
+            hashed_password=db_user.hashed_password,
+            disabled=db_user.disabled,
+            email=db_user.email,
+        )
 
     def list_users(self) -> List[User]:
-        return list(self._users.values())
+        db_users = UserRepository.list_all()
+        return [
+            User(
+                username=u.username,
+                role=UserRole(u.role),
+                hashed_password=u.hashed_password,
+                disabled=u.disabled,
+                email=u.email,
+            )
+            for u in db_users
+        ]
 
     def user_exists(self, username: str) -> bool:
-        return username in self._users
+        return UserRepository.get_by_username(username) is not None
 
 
 user_store = UserStore()

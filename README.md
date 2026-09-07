@@ -17,7 +17,10 @@ Production-grade GraphRAG cybersecurity threat-intelligence investigation platfo
 - **Deterministic Anti-Hallucination**: Immediate short-circuiting on `EMPTY_RETRIEVAL` without invoking the LLM, paired with claim-level evidence grounding.
 - **M1–M5 AI Quality Framework**: Automated metrics for Task Completion (M1), Faithfulness (M2), Hallucination Rate & Calibration (M3), Cost per Task (M4), and Latency P95 (M5).
 - **Enterprise Defense & Security**: Token budget guards, input sanitization against prompt injection, circuit breaker failover, and JWT-authenticated session security.
-- **Clean Light-Themed Web Console**: Responsive Next.js interface with live query console, usage billing, real-time observability telemetry, and evaluation runners.
+- **Production Multi-User Persistence**: PostgreSQL-backed user management, saved investigations, usage tracking, and subscriptions with SQLAlchemy 2.0 ORM (SQLite auto-fallback for development).
+- **Multi-User Isolation & Anti-IDOR**: Server-side ownership enforcement on all user-scoped data with session context isolation and cache key scoping.
+- **Public Registration & Authentication**: Open user registration with bcrypt password hashing, JWT token issuance, and complete auth lifecycle (`register`, `login`, `me`, `logout`).
+- **Clean Light-Themed Web Console**: Responsive Next.js interface with live query console, login/register, usage billing, real-time observability telemetry, and evaluation runners.
 
 ---
 
@@ -58,7 +61,8 @@ Production-grade GraphRAG cybersecurity threat-intelligence investigation platfo
 ### 1. Prerequisites
 - Python 3.10+
 - Node.js 18+ (for frontend)
-- Docker & Docker Compose (optional for containerized setup)
+- Docker & Docker Compose (recommended for full-stack deployment)
+- PostgreSQL 16+ (production) or SQLite (development, auto-detected)
 
 ### 2. Installation
 
@@ -80,10 +84,11 @@ cp .env.example .env
 ```
 
 ### 3. Running with Docker Compose
-To run both the Neo4j graph database and the backend service:
+Launches PostgreSQL, Neo4j, FastAPI backend, and Next.js frontend:
 ```bash
 docker-compose up --build -d
 ```
+Services: `postgres` (5432), `neo4j` (7474/7687), `backend` (8000), `frontend` (3000).
 
 ### 4. Running Locally
 
@@ -123,7 +128,7 @@ python -m pytest evaluation/runners/run_full_eval.py -v
 
 ## Test Suite
 
-Execute the full suite of unit, integration, and security tests:
+Execute the full suite of 81 unit, integration, security, and multi-user isolation tests:
 ```bash
 pytest backend/tests/ -v
 ```

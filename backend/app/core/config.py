@@ -19,6 +19,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Environment & Database ---
+    ENVIRONMENT: str = "development"
+    DATABASE_URL: str = "sqlite:///./data/secure_graphrag.db"
+
     # --- LLM ---
     LLM_PROVIDER: Literal["mock", "gemini", "groq", "ollama", "openai", "multi"] = "mock"
     GOOGLE_API_KEY: str = ""
@@ -46,6 +50,7 @@ class Settings(BaseSettings):
         return self.JWT_EXPIRY_MINUTES
 
     # --- Default users ---
+    SEED_DEFAULT_USERS: bool = True
     DEFAULT_USER_USERNAME: str = "analyst"
     DEFAULT_USER_PASSWORD: str = "SecureAnalyst2024!"
     DEFAULT_ADMIN_USERNAME: str = "admin"

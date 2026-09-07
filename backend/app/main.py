@@ -29,6 +29,7 @@ from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware, TimingMiddleware
 from app.core.telemetry import telemetry_store
+from app.db.database import init_db
 from app.graph.client import neo4j_client
 from app.security.auth import seed_default_users
 
@@ -40,6 +41,7 @@ logger = get_logger("app.main")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifecycle event handler for startup and shutdown actions."""
     logger.info("application_starting", version="1.0.0", env=settings.ENVIRONMENT)
+    init_db()
     seed_default_users()
 
     # Attempt connection to Neo4j

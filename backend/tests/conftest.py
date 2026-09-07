@@ -28,17 +28,57 @@ os.environ["NEO4J_PASSWORD"] = "graphrag_secure_2024"
 os.environ["MAX_CONTEXT_TOKENS"] = "2000"
 
 
+os.environ["DATABASE_URL"] = "sqlite:///./data/test_secure_graphrag.db"
+os.environ["SEED_DEFAULT_USERS"] = "true"
+
+
 @pytest.fixture(autouse=True)
-def reset_test_caches():
-    """Clear query cache and reset telemetry before each test."""
+def reset_test_state():
+    """Clear query cache, reset database tables, and re-seed default test users."""
     try:
         from app.cache.cache import query_cache
         query_cache.clear()
     except Exception:
         pass
+
+    try:
+        from app.db.database import SessionLocal, init_db
+        from app.db.models import (
+            DBFeedback,
+            DBProfile,
+            DBSavedInvestigation,
+            DBSessionContext,
+            DBSubscription,
+            DBUser,
+            DBUserMemory,
+            DBUserUsage,
+        )
+        from app.security.auth import seed_default_users
+
+        init_db()
+        db = SessionLocal()
+        try:
+            db.query(DBFeedback).delete()
+            db.query(DBSavedInvestigation).delete()
+            db.query(DBSessionContext).delete()
+            db.query(DBUserMemory).delete()
+            db.query(DBUserUsage).delete()
+            db.query(DBSubscription).delete()
+            db.query(DBProfile).delete()
+            db.query(DBUser).delete()
+            db.commit()
+        finally:
+            db.close()
+
+        seed_default_users()
+    except Exception:
+        pass
+
     yield
+
     try:
         from app.cache.cache import query_cache
         query_cache.clear()
     except Exception:
         pass
+

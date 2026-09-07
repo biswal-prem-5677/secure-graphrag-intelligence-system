@@ -4,7 +4,9 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 pydantic-settings>=2.2.0
 
-# Graph & Data
+# Database & Persistence (PostgreSQL / SQLite)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
 neo4j>=5.20.0
 
 # Security & Authentication

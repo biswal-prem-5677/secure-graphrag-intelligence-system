@@ -12,6 +12,7 @@ const NAV = [
   { href: "/dashboard", label: "Query Console", icon: "🔍" },
   { href: "/billing", label: "Usage & Billing", icon: "📊" },
   { section: "Account" },
+  { href: "/login", label: "Sign In / Register", icon: "🔐" },
   { href: "/profile", label: "Profile", icon: "👤" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
   { section: "Admin" },

@@ -69,10 +69,72 @@ Prometheus and telemetry runtime statistics.
 
 ---
 
-## Authentication & Billing
+## Authentication & User Management
 
-### `POST /api/v1/auth/token`
-Obtain JWT bearer access token.
+### `POST /api/v1/auth/register`
+Public user registration. Creates user, profile, and free subscription.
+
+**Request Body:**
+```json
+{
+  "username": "new_analyst",
+  "password": "SecurePassword123!",
+  "email": "analyst@example.com"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "Bearer",
+  "username": "new_analyst",
+  "role": "analyst"
+}
+```
+
+### `POST /api/v1/auth/login`
+Authenticate with username and password, returns JWT token.
+
+**Request Body:**
+```json
+{
+  "username": "analyst",
+  "password": "SecureAnalyst2024!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "Bearer",
+  "username": "analyst",
+  "role": "analyst"
+}
+```
+
+### `GET /api/v1/auth/me`
+Returns authenticated user profile (no sensitive fields).
+
+**Response (200 OK):**
+```json
+{
+  "id": "uuid4",
+  "username": "analyst",
+  "email": "analyst@example.com",
+  "role": "analyst",
+  "disabled": false
+}
+```
+
+### `POST /api/v1/auth/logout`
+Acknowledges session logout for the authenticated user.
+
+---
+
+## Billing & Usage
 
 ### `GET /api/v1/billing/usage`
 Retrieve current daily query quota, consumption, and tier status.
+
