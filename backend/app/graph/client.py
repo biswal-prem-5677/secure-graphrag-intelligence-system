@@ -3,6 +3,8 @@ Neo4j async driver wrapper with connection management, query execution, and fall
 """
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import Any, Dict, List, Optional
 from neo4j import AsyncGraphDatabase, AsyncDriver
 from neo4j.exceptions import ServiceUnavailable, AuthError
@@ -18,17 +20,48 @@ class Neo4jClient:
     def __init__(self) -> None:
         self.uri = settings.NEO4J_URI
         self.user = settings.NEO4J_USER
-        self.password = settings.NEO4J_PASSWORD
+        self.password = os.environ.get("SECRET_NEO4J_PASSWORD") or settings.NEO4J_PASSWORD
         self.driver: Optional[AsyncDriver] = None
         self._connected = False
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def is_connected(self) -> bool:
+        """Return current connection status without performing network I/O."""
+        return self._connected and self.driver is not None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Lazy lock initialization to bind to active event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def connect(self) -> bool:
-        """Initialize the Neo4j driver."""
+        """Initialize the Neo4j driver with concurrency protection."""
+        async with self.lock:
+            return await self._connect_locked()
+
+    async def _connect_locked(self) -> bool:
+        """Internal driver initialization executed under lock."""
+        self.uri = settings.NEO4J_URI
+        self.user = settings.NEO4J_USER
+        self.password = os.environ.get("SECRET_NEO4J_PASSWORD") or settings.NEO4J_PASSWORD
+
+        if self.driver:
+            try:
+                await self.driver.close()
+            except Exception:
+                pass
+            self.driver = None
+            self._connected = False
+
         try:
-            self.driver = AsyncGraphDatabase.driver(
+            driver = AsyncGraphDatabase.driver(
                 self.uri, auth=(self.user, self.password), max_connection_lifetime=3600
             )
-            await self.driver.verify_connectivity()
+            await driver.verify_connectivity()
+            self.driver = driver
             self._connected = True
             logger.info("neo4j_connected", uri=self.uri)
             return True
@@ -41,22 +74,39 @@ class Neo4jClient:
             self._connected = False
             return False
 
+    async def reconnect(self) -> bool:
+        """Safely attempt to reconnect if disconnected, avoiding connection storms."""
+        async with self.lock:
+            if self.driver and self._connected:
+                try:
+                    await self.driver.verify_connectivity()
+                    return True
+                except Exception:
+                    self._connected = False
+            return await self._connect_locked()
+
     async def close(self) -> None:
         """Close the driver."""
-        if self.driver:
-            await self.driver.close()
-            self._connected = False
-            logger.info("neo4j_disconnected")
+        async with self.lock:
+            if self.driver:
+                try:
+                    await self.driver.close()
+                except Exception:
+                    pass
+                self.driver = None
+                self._connected = False
+                logger.info("neo4j_disconnected")
 
     async def is_healthy(self) -> bool:
-        """Check if Neo4j is reachable."""
-        if not self.driver or not self._connected:
-            return False
-        try:
-            await self.driver.verify_connectivity()
-            return True
-        except Exception:
-            return False
+        """Check if Neo4j is reachable. Reuses existing driver if connected; controlled reconnect otherwise."""
+        if self.driver and self._connected:
+            try:
+                await self.driver.verify_connectivity()
+                return True
+            except Exception:
+                self._connected = False
+
+        return await self.reconnect()
 
     async def execute_read(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if not self.driver or not self._connected:

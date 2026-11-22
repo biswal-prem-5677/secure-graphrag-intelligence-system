@@ -16,6 +16,7 @@ class UserRole(str, Enum):
 
 
 class User(BaseModel):
+    id: str
     username: str
     role: UserRole = UserRole.analyst
     hashed_password: str
@@ -34,6 +35,7 @@ class UserStore:
                 hashed_password=user.hashed_password,
                 email=user.email,
                 role=user.role.value,
+                user_id=user.id,
             )
 
     def get_user(self, username: str) -> Optional[User]:
@@ -41,6 +43,7 @@ class UserStore:
         if not db_user:
             return None
         return User(
+            id=db_user.id,
             username=db_user.username,
             role=UserRole(db_user.role),
             hashed_password=db_user.hashed_password,
@@ -52,6 +55,7 @@ class UserStore:
         db_users = UserRepository.list_all()
         return [
             User(
+                id=u.id,
                 username=u.username,
                 role=UserRole(u.role),
                 hashed_password=u.hashed_password,

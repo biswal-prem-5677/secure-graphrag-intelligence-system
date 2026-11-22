@@ -107,6 +107,7 @@ def seed_default_users() -> None:
         logger.warning("seed_default_users_init_db_error", error=str(e))
         return
 
+    import uuid
     admin_pw = settings.DEFAULT_ADMIN_PASSWORD
     user_pw = settings.DEFAULT_USER_PASSWORD
 
@@ -114,6 +115,7 @@ def seed_default_users() -> None:
         if not user_store.user_exists("admin"):
             user_store.add_user(
                 User(
+                    id=str(uuid.uuid4()),
                     username="admin",
                     role=UserRole.admin,
                     hashed_password=hash_password(admin_pw),
@@ -125,6 +127,7 @@ def seed_default_users() -> None:
         if not user_store.user_exists("analyst"):
             user_store.add_user(
                 User(
+                    id=str(uuid.uuid4()),
                     username="analyst",
                     role=UserRole.analyst,
                     hashed_password=hash_password(user_pw),

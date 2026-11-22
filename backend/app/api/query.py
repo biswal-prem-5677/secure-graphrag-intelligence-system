@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, Request
 from app.cache.cache import query_cache
+from app.db.repository import QueryHistoryRepository
 from app.models.user import User
 from app.schemas.schemas import QueryHistoryItem, QueryRequest, QueryResponse
 from app.security.auth import get_current_user
@@ -13,7 +14,6 @@ from app.services.query_service import query_service
 
 router = APIRouter(prefix="/api/v1/query", tags=["GraphRAG Query"])
 query_limiter = RateLimiter(max_requests=60, window_seconds=60)
-_query_history: List[QueryHistoryItem] = []
 
 
 @router.post("", response_model=QueryResponse)
@@ -26,18 +26,16 @@ async def submit_query(
     check_rate_limit(request, query_limiter, username=current_user.username)
     resp = await query_service.execute_query(
         request=req,
-        user_id=current_user.username,
+        user_id=current_user.id,
         user_role=current_user.role.value,
     )
-    time_str = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    _query_history.append(
-        QueryHistoryItem(
-            query_id=resp.query_id,
-            query=resp.query,
-            timestamp=time_str,
-            confidence=resp.confidence.value,
-            operational_state=resp.operational_state.value,
-        )
+    # Persist to per-user history in DB
+    QueryHistoryRepository.create(
+        user_id=current_user.id,
+        query_id=resp.query_id,
+        query=resp.query,
+        confidence=resp.confidence.value,
+        operational_state=resp.operational_state.value,
     )
     return resp
 
@@ -47,8 +45,18 @@ async def get_history(
     limit: int = 50,
     current_user: User = Depends(get_current_user),
 ) -> List[QueryHistoryItem]:
-    """Retrieve recent queries submitted in the session."""
-    return _query_history[-limit:]
+    """Retrieve recent queries for the authenticated user."""
+    entries = QueryHistoryRepository.list_for_user(user_id=current_user.id, limit=limit)
+    return [
+        QueryHistoryItem(
+            query_id=e.query_id,
+            query=e.query,
+            timestamp=e.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            confidence=e.confidence,
+            operational_state=e.operational_state,
+        )
+        for e in entries
+    ]
 
 
 @router.get("/cache/stats")

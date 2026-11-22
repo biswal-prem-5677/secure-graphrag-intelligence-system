@@ -16,7 +16,7 @@ async def submit_investigation_feedback(
     current_user: User = Depends(get_current_user),
 ):
     """Submit user satisfaction rating on an investigation result."""
-    feedback = UserFeedback(**req.model_dump(), user_id=current_user.username)
+    feedback = UserFeedback(**req.model_dump(), user_id=current_user.id)
     feedback_store.submit_feedback(feedback)
     return {"message": "Feedback submitted successfully", "id": feedback.id}
 

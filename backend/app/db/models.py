@@ -147,3 +147,19 @@ class DBFeedback(Base):
     is_hallucination = Column(Boolean, default=False, nullable=False)
     is_incomplete = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+
+class DBQueryHistory(Base):
+    __tablename__ = "query_history"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    query_id = Column(String(100), nullable=False)
+    query = Column(Text, nullable=False)
+    confidence = Column(String(32), nullable=False)
+    operational_state = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_query_history_user_created", "user_id", "created_at"),
+    )

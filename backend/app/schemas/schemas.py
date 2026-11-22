@@ -71,6 +71,17 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=100)
     email: Optional[str] = Field(default=None, max_length=255)
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        # Basic email format validation
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(email_pattern, v):
+            raise ValueError("Invalid email format")
+        return v
+
 
 class UserResponse(BaseModel):
     id: Optional[str] = None
@@ -198,6 +209,8 @@ class EntityGraphResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "healthy"
     version: str = "1.0.0"
+    llm_provider: Optional[str] = None
+    neo4j_connected: Optional[bool] = None
 
 
 class ReadyResponse(BaseModel):
