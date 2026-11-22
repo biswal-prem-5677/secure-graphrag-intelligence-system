@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 from app.core.config import Settings
-from app.graph.client import Neo4jClient
+from app.graph.client import Neo4jClient, neo4j_client
 from app.main import app
 from app.retrieval.graph_retriever import GraphRetriever
 
@@ -142,7 +142,7 @@ async def test_concurrent_health_calls_prevent_driver_storms(client_instance):
 def test_readiness_probe_returns_200_when_neo4j_healthy():
     """Integration test: /ready returns HTTP 200 and connected when Neo4j is healthy."""
     test_http = TestClient(app)
-    with patch("app.api.health.neo4j_client.is_healthy", new_callable=AsyncMock) as mock_health, \
+    with patch.object(neo4j_client, "is_healthy", new_callable=AsyncMock) as mock_health, \
          patch("app.api.health._check_postgres", return_value=(True, "connected")):
         mock_health.return_value = True
 
@@ -157,7 +157,7 @@ def test_readiness_probe_returns_200_when_neo4j_healthy():
 def test_readiness_probe_returns_503_when_neo4j_unavailable():
     """Integration test: /ready returns HTTP 503 and degraded when Neo4j is unavailable."""
     test_http = TestClient(app)
-    with patch("app.api.health.neo4j_client.is_healthy", new_callable=AsyncMock) as mock_health, \
+    with patch.object(neo4j_client, "is_healthy", new_callable=AsyncMock) as mock_health, \
          patch("app.api.health._check_postgres", return_value=(True, "connected")):
         mock_health.return_value = False
 
@@ -176,8 +176,8 @@ async def test_graphrag_uses_live_neo4j_when_healthy():
         {"id": "threat-actor--live1", "name": "PHANTOM DRAGON", "label": "ThreatActor", "props": {"origin": "APT"}}
     ]
 
-    with patch("app.retrieval.graph_retriever.neo4j_client.is_healthy", new_callable=AsyncMock) as mock_healthy, \
-         patch("app.retrieval.graph_retriever.neo4j_client.execute_read", new_callable=AsyncMock) as mock_read:
+    with patch.object(neo4j_client, "is_healthy", new_callable=AsyncMock) as mock_healthy, \
+         patch.object(neo4j_client, "execute_read", new_callable=AsyncMock) as mock_read:
         mock_healthy.return_value = True
         mock_read.return_value = mock_records
 
@@ -194,8 +194,8 @@ async def test_graphrag_preserves_offline_fallback_when_neo4j_unavailable():
     """Verify GraphRetriever falls back to offline dictionary when Neo4j is disconnected."""
     retriever = GraphRetriever()
 
-    with patch("app.retrieval.graph_retriever.neo4j_client.is_healthy", new_callable=AsyncMock) as mock_healthy, \
-         patch("app.retrieval.graph_retriever.neo4j_client.execute_read", new_callable=AsyncMock) as mock_read:
+    with patch.object(neo4j_client, "is_healthy", new_callable=AsyncMock) as mock_healthy, \
+         patch.object(neo4j_client, "execute_read", new_callable=AsyncMock) as mock_read:
         mock_healthy.return_value = False
 
         nodes = await retriever.resolve_entities(["PHANTOM DRAGON"])
