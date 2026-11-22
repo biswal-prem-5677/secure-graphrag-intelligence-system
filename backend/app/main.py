@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,31 +28,43 @@ from app.api import (
 from app.cache.cache import query_cache
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
-from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware, TimingMiddleware
+from app.core.middleware import (
+    RequestBodyLimitMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+    TimingMiddleware,
+)
 from app.core.telemetry import telemetry_store
 from app.db.database import init_db
 from app.graph.client import neo4j_client
 from app.security.auth import seed_default_users
 
 setup_logging()
-logger = get_logger("app.main")
+logger = get_logger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Lifecycle event handler for startup and shutdown actions."""
-    logger.info("application_starting", version="1.0.0", env=settings.ENVIRONMENT)
+    logger.info(
+        "application_startup",
+        environment=settings.ENVIRONMENT,
+        llm_provider=settings.LLM_PROVIDER,
+        neo4j_uri=settings.NEO4J_URI,
+    )
+    # Initialize relational database tables (PostgreSQL in prod, SQLite in dev/testing)
     init_db()
+
+    # Seed default roles (admin/analyst) if enabled
     seed_default_users()
 
-    # Attempt connection to Neo4j
-    connected = await neo4j_client.connect()
-    if connected:
-        logger.info("neo4j_initialization_success")
+    # Initialize Neo4j connectivity
+    neo_ok = await neo4j_client.connect()
+    if neo_ok:
+        logger.info("neo4j_initialization_success", uri=settings.NEO4J_URI)
     else:
         logger.warning(
-            "neo4j_initialization_delayed",
-            msg=f"Ensure Neo4j is running on {settings.NEO4J_URI} or operating in offline fallback mode.",
+            "neo4j_initialization_offline_fallback",
+            msg=f"Neo4j unreachable at {settings.NEO4J_URI}; operating in offline fallback mode.",
         )
 
     yield
@@ -65,20 +78,21 @@ app = FastAPI(
     description="Production-grade GraphRAG cybersecurity threat-intelligence investigation platform with grounded reasoning, multi-hop traversal, and explainable confidence scoring.",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if settings.ENVIRONMENT == "production" else "/docs",
+    redoc_url=None if settings.ENVIRONMENT == "production" else "/redoc",
 )
 
-# CORS Middleware
+# CORS Middleware - hardened methods & headers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
 )
 
 # Custom Middlewares
+app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TimingMiddleware)
 app.add_middleware(RequestIDMiddleware)
@@ -87,10 +101,11 @@ app.add_middleware(RequestIDMiddleware)
 # Exception Handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    logger.warning("request_validation_failed", errors=exc.errors(), url=str(request.url))
+    errs = jsonable_encoder(exc.errors())
+    logger.warning("request_validation_failed", errors=errs, url=str(request.url))
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"error": "Validation Error", "detail": "Invalid payload", "errors": exc.errors()},
+        content={"error": "Validation Error", "detail": "Invalid payload", "errors": errs},
     )
 
 

@@ -20,7 +20,7 @@ async def list_saved_investigations(
     current_user: User = Depends(get_current_user),
 ) -> List[SavedInvestigation]:
     """List all saved investigations belonging to current user."""
-    return saved_store.list_for_user(current_user.username)
+    return saved_store.list_for_user(current_user.id)
 
 
 @router.post("", response_model=SavedInvestigation)
@@ -29,7 +29,7 @@ async def save_investigation(
     current_user: User = Depends(get_current_user),
 ) -> SavedInvestigation:
     """Save an investigation record for future retrieval."""
-    return saved_store.save(current_user.username, req)
+    return saved_store.save(current_user.id, req)
 
 
 @router.get("/{inv_id}", response_model=SavedInvestigation)
@@ -38,7 +38,7 @@ async def get_saved_investigation(
     current_user: User = Depends(get_current_user),
 ) -> SavedInvestigation:
     """Retrieve a single saved investigation by ID with ownership check."""
-    item = saved_store.get(current_user.username, inv_id)
+    item = saved_store.get(current_user.id, inv_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved investigation not found")
     return item
@@ -51,7 +51,7 @@ async def rename_saved_investigation(
     current_user: User = Depends(get_current_user),
 ) -> SavedInvestigation:
     """Rename a saved investigation."""
-    item = saved_store.update_title(current_user.username, inv_id, req.title)
+    item = saved_store.update_title(current_user.id, inv_id, req.title)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved investigation not found")
     return item
@@ -63,7 +63,7 @@ async def delete_saved_investigation(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a saved investigation record."""
-    deleted = saved_store.delete(current_user.username, inv_id)
+    deleted = saved_store.delete(current_user.id, inv_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved investigation not found")
     return {"message": "Investigation successfully removed"}

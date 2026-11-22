@@ -51,7 +51,7 @@ export default function SettingsPage() {
               <tr>
                 <td style={{ fontWeight: 600, width: 180 }}>API Status</td>
                 <td>
-                  <span className={`status-dot ${health?.status === "ok" ? "online" : "offline"}`} />{" "}
+                  <span className={`status-dot ${(health?.status === "ok" || health?.status === "healthy") ? "online" : "offline"}`} />{" "}
                   {health?.status || "Checking…"}
                 </td>
               </tr>

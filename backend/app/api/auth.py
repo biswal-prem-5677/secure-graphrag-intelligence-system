@@ -50,11 +50,11 @@ async def register(req: RegisterRequest, request: Request) -> LoginResponse:
 
     # Initialize default user profile & subscription tier
     ProfileRepository.get_or_create(
-        user_id=db_user.username,
+        user_id=db_user.id,
         display_name=req.username,
         email=req.email,
     )
-    SubscriptionRepository.get_or_create(user_id=db_user.username)
+    SubscriptionRepository.get_or_create(user_id=db_user.id)
 
     logger.info("user_registered_successfully", username=req.username)
 
@@ -95,9 +95,9 @@ async def login(req: LoginRequest, request: Request) -> LoginResponse:
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """Return authenticated current user profile without sensitive fields."""
-    db_user = UserRepository.get_by_username(current_user.username)
+    db_user = UserRepository.get_by_id(current_user.id) or UserRepository.get_by_username(current_user.username)
     return UserResponse(
-        id=db_user.id if db_user else None,
+        id=current_user.id,
         username=current_user.username,
         email=current_user.email,
         role=current_user.role.value,

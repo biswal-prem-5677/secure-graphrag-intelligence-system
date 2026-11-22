@@ -2,6 +2,39 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.2.0] - 2026-09-08
+
+### Added
+- **Production Hardening & Concurrency Safety**:
+  - Atomic database-level conditional quota enforcement in `UsageRepository.check_and_increment` preventing race conditions under high concurrency.
+  - Connection pool configuration: `DB_POOL_SIZE=50`, `DB_POOL_MAX_OVERFLOW=20`, `pool_pre_ping=True`, and `pool_recycle=3600`.
+  - Redis sliding-window rate limiter with `rediss://` TLS support and fail-closed production semantics.
+  - `RequestBodyLimitMiddleware`: 10MB payload ceiling returning HTTP 413 to prevent memory exhaustion attacks.
+  - Production Swagger UI gating: `docs_url` and `redoc_url` disabled when `ENVIRONMENT=production`.
+  - Hardened CORS configuration with method and header whitelists.
+  - Standalone, idempotent Neo4j STIX threat intelligence seeder (`backend/app/graph/seed.py`, `backend/scripts/seed_neo4j.py`).
+  - Production environment template `.env.production.example`.
+- **Automated Production Acceptance & Concurrency Tests**:
+  - `test_production_acceptance.py`: 8 tests covering fail-closed configuration, admin RBAC, sandbox upgrade removal, query history isolation, email format validation, and payload size limits.
+  - `test_concurrency_and_scale.py`: 3 tests verifying multi-threaded atomic quota enforcement, connection pool stability with 50 workers, and parallel history writes.
+  - `test_neo4j_lifecycle.py` and `test_neo4j_seed.py`: 12 tests covering Neo4j connection lifecycle, driver termination, retry dynamics, and idempotent graph seeding.
+  - Full automated test suite expanded to 107 tests (all passing).
+- **Admin AI Quality & Benchmark Suite API**:
+  - `GET /api/v1/admin/evaluations`: Serves current automated benchmark evaluation metrics (M1-M5).
+  - `POST /api/v1/admin/evaluations/run`: Triggers on-demand evaluation execution with RBAC protection.
+- **Frontend End-to-End Authentication Unification**:
+  - Unified `auth_token` and `token` storage across Dashboard, Billing, Profile, and Quality admin consoles.
+  - Dashboard query console gracefully handles authentication requirements with actionable guidance.
+
+### Changed
+- `pyproject.toml` & `requirements.txt`: Pinned `starlette>=0.37.2,<0.39.0` and added `asyncio_default_fixture_loop_scope = "function"` to resolve FastAPI routing compatibility and pytest deprecation warnings.
+- `backend/app/schemas/schemas.py` & `backend/app/api/health.py`: Added `llm_provider` and `neo4j_connected` attributes to `HealthResponse` for live system status inspection.
+- `frontend/next.config.ts`: Added dynamic backend routing via `BACKEND_INTERNAL_URL` with local dev fallback.
+- `docker-compose.yml`: Integrated Redis service, mandatory `SECRET_*` environment variable enforcement, and `BACKEND_INTERNAL_URL`.
+- `frontend/app/billing/page.tsx`: Replaced `/api/v1/billing/usage` with canonical `/api/v1/billing/subscription` endpoint with bearer auth.
+- `backend/app/api/billing.py`: Permanently removed developer sandbox self-upgrade/downgrade endpoints.
+- `backend/app/main.py`: Serialized validation exceptions using `jsonable_encoder`.
+
 ## [1.1.0] - 2026-09-07
 
 ### Added

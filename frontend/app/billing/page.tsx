@@ -15,24 +15,38 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/v1/billing/usage")
+    const token = typeof window !== "undefined" ? (localStorage.getItem("auth_token") || localStorage.getItem("token")) : null;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    fetch("/api/v1/billing/subscription", { headers })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) =>
-        setUsage(
-          data || {
+      .then((data) => {
+        if (!data) {
+          setUsage({
             tier: "free",
             queries_today: 0,
-            daily_limit: 10,
+            daily_limit: 20,
             total_cost_usd: 0,
             total_queries: 0,
-          }
-        )
-      )
+          });
+          return;
+        }
+        setUsage({
+          tier: data.plan_tier || data.tier || "free",
+          queries_today: data.daily_count ?? data.queries_today ?? 0,
+          daily_limit: data.daily_limit ?? 20,
+          total_cost_usd: data.total_cost_usd ?? 0,
+          total_queries: data.total_queries ?? data.daily_count ?? 0,
+        });
+      })
       .catch(() =>
         setUsage({
           tier: "free",
           queries_today: 0,
-          daily_limit: 10,
+          daily_limit: 20,
           total_cost_usd: 0,
           total_queries: 0,
         })

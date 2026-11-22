@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-emerald.svg)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.3+-black.svg)](https://nextjs.org/)
 
 Production-grade GraphRAG cybersecurity threat-intelligence investigation platform featuring grounded reasoning, multi-hop Neo4j traversal, explainable confidence scoring, and strict anti-hallucination guardrails.
 
@@ -20,7 +20,8 @@ Production-grade GraphRAG cybersecurity threat-intelligence investigation platfo
 - **Production Multi-User Persistence**: PostgreSQL-backed user management, saved investigations, usage tracking, and subscriptions with SQLAlchemy 2.0 ORM (SQLite auto-fallback for development).
 - **Multi-User Isolation & Anti-IDOR**: Server-side ownership enforcement on all user-scoped data with session context isolation and cache key scoping.
 - **Public Registration & Authentication**: Open user registration with bcrypt password hashing, JWT token issuance, and complete auth lifecycle (`register`, `login`, `me`, `logout`).
-- **Clean Light-Themed Web Console**: Responsive Next.js interface with live query console, login/register, usage billing, real-time observability telemetry, and evaluation runners.
+- **Distributed Redis Rate Limiting**: Sliding-window rate limiter with `rediss://` TLS support and fail-closed production semantics.
+- **Clean Light-Themed Web Console**: Responsive Next.js 16 interface with live query console, login/register, usage billing, real-time observability telemetry, and evaluation runners.
 
 ---
 
@@ -39,7 +40,7 @@ Production-grade GraphRAG cybersecurity threat-intelligence investigation platfo
 |  +--------------------+   +-----------------------+   +---------------------+  |
 |  | Security / Auth    |   | Query Orchestration   |   | Telemetry / Cache   |  |
 |  | - JWT validation   |   | - Query Analyzer      |   | - Prometheus metrics|  |
-|  | - Rate Limiter     |   | - Context Builder     |   | - Memory Store      |  |
+|  | - Redis Limiter    |   | - Context Builder     |   | - Memory Store      |  |
 |  | - Input sanitizer  |   | - Claim Verifier      |   | - TTL query cache   |  |
 |  +--------------------+   +-----------+-----------+   +---------------------+  |
 |                                       |                                        |
@@ -63,6 +64,7 @@ Production-grade GraphRAG cybersecurity threat-intelligence investigation platfo
 - Node.js 18+ (for frontend)
 - Docker & Docker Compose (recommended for full-stack deployment)
 - PostgreSQL 16+ (production) or SQLite (development, auto-detected)
+- Redis 7+ (production rate limiting) or in-memory (development)
 
 ### 2. Installation
 
@@ -84,11 +86,11 @@ cp .env.example .env
 ```
 
 ### 3. Running with Docker Compose
-Launches PostgreSQL, Neo4j, FastAPI backend, and Next.js frontend:
+Launches PostgreSQL, Redis, Neo4j, FastAPI backend, and Next.js frontend:
 ```bash
 docker-compose up --build -d
 ```
-Services: `postgres` (5432), `neo4j` (7474/7687), `backend` (8000), `frontend` (3000).
+Services: `postgres` (5432), `redis` (6379), `neo4j` (7474/7687), `backend` (8000), `frontend` (3000).
 
 ### 4. Running Locally
 
@@ -107,13 +109,23 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### 5. Seeding the Neo4j Threat Intelligence Graph
+Populate Neo4j with canonical STIX 2.1 threat actors, campaigns, malware, vulnerabilities, and MITRE ATT&CK techniques:
+```bash
+# Locally:
+python backend/scripts/seed_neo4j.py
+
+# Inside Docker:
+docker compose exec backend python scripts/seed_neo4j.py
+```
+
 ---
 
 ## Evaluation Suite (M1–M5)
 
-Run the automated evaluation benchmark:
+Run the deep automated evaluation benchmark:
 ```bash
-python -m pytest evaluation/runners/run_full_eval.py -v
+python evaluation/runners/run_full_eval.py
 ```
 
 | Metric | Name | Target | Description |
@@ -128,7 +140,7 @@ python -m pytest evaluation/runners/run_full_eval.py -v
 
 ## Test Suite
 
-Execute the full suite of 81 unit, integration, security, and multi-user isolation tests:
+Execute the complete suite of 107 unit, integration, scale/concurrency, Neo4j lifecycle, and multi-user isolation security tests:
 ```bash
 pytest backend/tests/ -v
 ```
@@ -137,6 +149,26 @@ Run load and performance tests using Locust:
 ```bash
 locust -f load_tests/locustfile.py --headless -u 20 -r 5 -t 1m --host http://localhost:8000
 ```
+
+---
+
+## Health & Probes
+
+| Endpoint | Type | Description |
+|---|---|---|
+| `GET /health` | Liveness | Verifies service responsiveness (returns status, version, LLM provider, Neo4j state) |
+| `GET /ready` | Readiness | Verifies database (PostgreSQL/SQLite), Neo4j, Redis, and cache connectivity |
+| `GET /metrics` | Observability | Prometheus-compatible performance, request count, latency percentiles, and cache metrics |
+
+---
+
+## Documentation Links
+
+- [REST API Reference](docs/API.md)
+- [System Architecture & Design](docs/ARCHITECTURE.md)
+- [Evaluation & Benchmark Methodology](docs/EVALUATION.md)
+- [Security Policy & Vulnerability Reporting](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ---
 

@@ -70,7 +70,9 @@ class BillingService:
 
     def verify_webhook_signature(self, payload_bytes: bytes, signature_header: str) -> bool:
         if not self.webhook_secret or self.webhook_secret.startswith("whsec_placeholder"):
-            return True
+            # Fail closed: reject webhook if secret is not configured
+            logger.warning("stripe_webhook_rejected_no_secret")
+            return False
         try:
             import stripe
             stripe.Webhook.construct_event(payload_bytes, signature_header, self.webhook_secret)

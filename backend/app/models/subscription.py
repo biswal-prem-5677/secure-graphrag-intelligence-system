@@ -59,10 +59,7 @@ class SubscriptionStore:
         """Update or create user subscription record."""
         db = SessionLocal()
         try:
-            db_sub = db.query(DBSubscription).filter(DBSubscription.user_id == sub.user_id).first()
-            if not db_sub:
-                db_sub = DBSubscription(user_id=sub.user_id)
-                db.add(db_sub)
+            db_sub = SubscriptionRepository.get_or_create(sub.user_id, db=db)
             db_sub.plan_tier = sub.plan_tier.value
             db_sub.status = sub.status.value
             db_sub.stripe_customer_id = sub.stripe_customer_id

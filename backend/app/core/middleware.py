@@ -37,11 +37,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'"
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
         )
         response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
+            "max-age=31536000; includeSubDomains; preload"
         )
         return response
 
@@ -62,3 +65,25 @@ class TimingMiddleware(BaseHTTPMiddleware):
             duration_ms=round(duration_ms, 2),
         )
         return response
+
+
+class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
+    """Enforce a maximum request body size (default: 10 MB) to prevent memory exhaustion."""
+
+    def __init__(self, app, max_body_bytes: int = 10 * 1024 * 1024):
+        super().__init__(app)
+        self.max_body_bytes = max_body_bytes
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > self.max_body_bytes:
+                    return Response(
+                        content='{"error": "Payload Too Large", "detail": "Request body exceeds maximum allowed size of 10MB"}',
+                        status_code=413,
+                        media_type="application/json",
+                    )
+            except ValueError:
+                pass
+        return await call_next(request)

@@ -1,6 +1,11 @@
 """
 SQLAlchemy database engine and session configuration.
 Seamlessly handles PostgreSQL in production and SQLite for local development and CI testing.
+
+Production pool settings come from environment variables via config.py:
+  DB_POOL_SIZE        (default 10)
+  DB_POOL_MAX_OVERFLOW (default 5)
+  DB_POOL_RECYCLE_SECONDS (default 3600)
 """
 from __future__ import annotations
 
@@ -34,11 +39,28 @@ if db_url.startswith("sqlite"):
         parent = Path(db_path).parent
         parent.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(
-    db_url,
-    connect_args=connect_args,
-    pool_pre_ping=True if not db_url.startswith("sqlite") else False,
-)
+# Build kwargs: pool settings only apply to non-SQLite databases
+engine_kwargs: dict = {
+    "connect_args": connect_args,
+    "pool_pre_ping": not db_url.startswith("sqlite"),
+    "pool_recycle": settings.DB_POOL_RECYCLE_SECONDS,
+}
+if not db_url.startswith("sqlite"):
+    engine_kwargs["pool_size"] = settings.DB_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DB_POOL_MAX_OVERFLOW
+
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
+
+engine = create_engine(db_url, **engine_kwargs)
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    import sqlite3
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

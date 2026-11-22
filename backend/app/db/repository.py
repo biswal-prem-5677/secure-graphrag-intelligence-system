@@ -12,6 +12,7 @@ from app.db.database import SessionLocal
 from app.db.models import (
     DBFeedback,
     DBProfile,
+    DBQueryHistory,
     DBSavedInvestigation,
     DBSessionContext,
     DBSubscription,
@@ -19,6 +20,24 @@ from app.db.models import (
     DBUserMemory,
     DBUserUsage,
 )
+
+
+def _resolve_user_id(user_identifier: str, db: Session) -> str:
+    """Resolve a user identifier (canonical UUID or login username) to DBUser.id.
+
+    Acts as a defense-in-depth safety net at the repository boundary to prevent
+    foreign key violations if legacy or external callers pass a username instead of UUID.
+    Never creates a new user; if not matched, returns the identifier unchanged so
+    relational foreign key constraints reject it predictably.
+    """
+    if not user_identifier:
+        return user_identifier
+    user = (
+        db.query(DBUser)
+        .filter((DBUser.id == user_identifier) | (DBUser.username == user_identifier))
+        .first()
+    )
+    return user.id if user else user_identifier
 
 
 class UserRepository:
@@ -59,14 +78,14 @@ class UserRepository:
                 db.close()
 
     @staticmethod
-    def create(username: str, hashed_password: str, email: Optional[str] = None, role: str = "analyst", db: Optional[Session] = None) -> DBUser:
+    def create(username: str, hashed_password: str, email: Optional[str] = None, role: str = "analyst", user_id: Optional[str] = None, db: Optional[Session] = None) -> DBUser:
         close = False
         if db is None:
             db = SessionLocal()
             close = True
         try:
             user = DBUser(
-                id=str(uuid.uuid4()),
+                id=user_id or str(uuid.uuid4()),
                 username=username,
                 email=email,
                 hashed_password=hashed_password,
@@ -102,11 +121,12 @@ class ProfileRepository:
             db = SessionLocal()
             close = True
         try:
-            prof = db.query(DBProfile).filter(DBProfile.user_id == user_id).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            prof = db.query(DBProfile).filter(DBProfile.user_id == resolved_id).first()
             if not prof:
                 prof = DBProfile(
-                    user_id=user_id,
-                    display_name=display_name or user_id.capitalize(),
+                    user_id=resolved_id,
+                    display_name=display_name or (resolved_id.capitalize() if resolved_id == user_id else user_id.capitalize()),
                     email=email or f"{user_id}@intelligence.local",
                     team="Cyber Threat Intelligence Team",
                     role_title=role_title,
@@ -144,7 +164,8 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
-            return db.query(DBUserMemory).filter(DBUserMemory.user_id == user_id).order_by(DBUserMemory.created_at.desc()).all()
+            resolved_id = _resolve_user_id(user_id, db)
+            return db.query(DBUserMemory).filter(DBUserMemory.user_id == resolved_id).order_by(DBUserMemory.created_at.desc()).all()
         finally:
             if close:
                 db.close()
@@ -156,12 +177,13 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
-            mem = db.query(DBUserMemory).filter(DBUserMemory.user_id == user_id, DBUserMemory.key == key).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            mem = db.query(DBUserMemory).filter(DBUserMemory.user_id == resolved_id, DBUserMemory.key == key).first()
             if mem:
                 mem.value = value
                 mem.category = category
             else:
-                mem = DBUserMemory(id=str(uuid.uuid4()), user_id=user_id, key=key, value=value, category=category)
+                mem = DBUserMemory(id=str(uuid.uuid4()), user_id=resolved_id, key=key, value=value, category=category)
                 db.add(mem)
             db.commit()
             db.refresh(mem)
@@ -177,7 +199,8 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
-            count = db.query(DBUserMemory).filter(DBUserMemory.user_id == user_id, DBUserMemory.id == memory_id).delete()
+            resolved_id = _resolve_user_id(user_id, db)
+            count = db.query(DBUserMemory).filter(DBUserMemory.user_id == resolved_id, DBUserMemory.id == memory_id).delete()
             db.commit()
             return count > 0
         finally:
@@ -191,8 +214,9 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
-            db.query(DBUserMemory).filter(DBUserMemory.user_id == user_id).delete()
-            db.query(DBSessionContext).filter(DBSessionContext.user_id == user_id).delete()
+            resolved_id = _resolve_user_id(user_id, db)
+            db.query(DBUserMemory).filter(DBUserMemory.user_id == resolved_id).delete()
+            db.query(DBSessionContext).filter(DBSessionContext.user_id == resolved_id).delete()
             db.commit()
         finally:
             if close:
@@ -205,16 +229,17 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             ctx = db.query(DBSessionContext).filter(
                 DBSessionContext.session_id == session_id,
-                DBSessionContext.user_id == user_id,
+                DBSessionContext.user_id == resolved_id,
             ).first()
             if not ctx:
-                ctx_id = f"{user_id}:{session_id}"
+                ctx_id = f"{resolved_id}:{session_id}"
                 ctx = DBSessionContext(
                     id=ctx_id,
                     session_id=session_id,
-                    user_id=user_id,
+                    user_id=resolved_id,
                     history_json="[]",
                     last_entity=None,
                     last_query=None,
@@ -234,16 +259,17 @@ class MemoryRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             ctx = db.query(DBSessionContext).filter(
                 DBSessionContext.session_id == session_id,
-                DBSessionContext.user_id == user_id,
+                DBSessionContext.user_id == resolved_id,
             ).first()
             if not ctx:
-                ctx_id = f"{user_id}:{session_id}"
+                ctx_id = f"{resolved_id}:{session_id}"
                 ctx = DBSessionContext(
                     id=ctx_id,
                     session_id=session_id,
-                    user_id=user_id,
+                    user_id=resolved_id,
                     history_json="[]",
                 )
                 db.add(ctx)
@@ -262,7 +288,6 @@ class MemoryRepository:
                 db.close()
 
 
-
 class SavedInvestigationRepository:
     @staticmethod
     def create(user_id: str, record_data: Dict[str, Any], db: Optional[Session] = None) -> DBSavedInvestigation:
@@ -271,9 +296,10 @@ class SavedInvestigationRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             inv = DBSavedInvestigation(
                 id=str(uuid.uuid4()),
-                user_id=user_id,
+                user_id=resolved_id,
                 query_id=record_data.get("query_id", ""),
                 query=record_data.get("query", ""),
                 title=record_data.get("title", ""),
@@ -300,9 +326,10 @@ class SavedInvestigationRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             return (
                 db.query(DBSavedInvestigation)
-                .filter(DBSavedInvestigation.user_id == user_id)
+                .filter(DBSavedInvestigation.user_id == resolved_id)
                 .order_by(DBSavedInvestigation.saved_at.desc())
                 .all()
             )
@@ -318,9 +345,10 @@ class SavedInvestigationRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             return (
                 db.query(DBSavedInvestigation)
-                .filter(DBSavedInvestigation.user_id == user_id, DBSavedInvestigation.id == inv_id)
+                .filter(DBSavedInvestigation.user_id == resolved_id, DBSavedInvestigation.id == inv_id)
                 .first()
             )
         finally:
@@ -334,7 +362,8 @@ class SavedInvestigationRepository:
             db = SessionLocal()
             close = True
         try:
-            inv = db.query(DBSavedInvestigation).filter(DBSavedInvestigation.user_id == user_id, DBSavedInvestigation.id == inv_id).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            inv = db.query(DBSavedInvestigation).filter(DBSavedInvestigation.user_id == resolved_id, DBSavedInvestigation.id == inv_id).first()
             if inv:
                 inv.title = new_title
                 db.commit()
@@ -351,9 +380,10 @@ class SavedInvestigationRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             count = (
                 db.query(DBSavedInvestigation)
-                .filter(DBSavedInvestigation.user_id == user_id, DBSavedInvestigation.id == inv_id)
+                .filter(DBSavedInvestigation.user_id == resolved_id, DBSavedInvestigation.id == inv_id)
                 .delete()
             )
             db.commit()
@@ -371,7 +401,8 @@ class UsageRepository:
             db = SessionLocal()
             close = True
         try:
-            rec = db.query(DBUserUsage).filter(DBUserUsage.user_id == user_id, DBUserUsage.date_str == date_str).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            rec = db.query(DBUserUsage).filter(DBUserUsage.user_id == resolved_id, DBUserUsage.date_str == date_str).first()
             return rec.query_count if rec else 0
         finally:
             if close:
@@ -379,21 +410,38 @@ class UsageRepository:
 
     @staticmethod
     def check_and_increment(user_id: str, date_str: str, limit: int, db: Optional[Session] = None) -> Tuple[bool, int, int]:
+        """Atomically check quota and increment using database-level conditional update."""
+        from sqlalchemy import text
         close = False
         if db is None:
             db = SessionLocal()
             close = True
         try:
-            rec = db.query(DBUserUsage).filter(DBUserUsage.user_id == user_id, DBUserUsage.date_str == date_str).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            # Ensure the row exists
+            rec = db.query(DBUserUsage).filter(DBUserUsage.user_id == resolved_id, DBUserUsage.date_str == date_str).first()
             if not rec:
-                rec = DBUserUsage(id=str(uuid.uuid4()), user_id=user_id, date_str=date_str, query_count=0)
-                db.add(rec)
-                db.flush()
-            if rec.query_count >= limit:
-                return False, rec.query_count, limit
-            rec.query_count += 1
+                try:
+                    init_rec = DBUserUsage(id=str(uuid.uuid4()), user_id=resolved_id, date_str=date_str, query_count=0)
+                    db.add(init_rec)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+            # Atomic conditional update preventing concurrent quota bypass
+            stmt = text(
+                "UPDATE user_usage "
+                "SET query_count = query_count + 1 "
+                "WHERE user_id = :uid AND date_str = :dt AND query_count < :limit"
+            )
+            res = db.execute(stmt, {"uid": resolved_id, "dt": date_str, "limit": limit})
             db.commit()
-            return True, rec.query_count, limit
+
+            # Retrieve current count
+            curr = db.query(DBUserUsage).filter(DBUserUsage.user_id == resolved_id, DBUserUsage.date_str == date_str).first()
+            count = curr.query_count if curr else limit
+
+            return (res.rowcount > 0, count, limit)
         finally:
             if close:
                 db.close()
@@ -407,9 +455,10 @@ class SubscriptionRepository:
             db = SessionLocal()
             close = True
         try:
-            sub = db.query(DBSubscription).filter(DBSubscription.user_id == user_id).first()
+            resolved_id = _resolve_user_id(user_id, db)
+            sub = db.query(DBSubscription).filter(DBSubscription.user_id == resolved_id).first()
             if not sub:
-                sub = DBSubscription(user_id=user_id, plan_tier="free", status="active")
+                sub = DBSubscription(user_id=resolved_id, plan_tier="free", status="active")
                 db.add(sub)
                 db.commit()
                 db.refresh(sub)
@@ -441,9 +490,10 @@ class FeedbackRepository:
             db = SessionLocal()
             close = True
         try:
+            resolved_id = _resolve_user_id(user_id, db)
             fb = DBFeedback(
                 id=str(uuid.uuid4()),
-                user_id=user_id,
+                user_id=resolved_id,
                 query_id=query_id,
                 query=query,
                 rating=rating,
@@ -467,6 +517,72 @@ class FeedbackRepository:
             close = True
         try:
             return db.query(DBFeedback).order_by(DBFeedback.created_at.desc()).limit(limit).all()
+        finally:
+            if close:
+                db.close()
+
+
+class QueryHistoryRepository:
+    """Repository for persisted, per-user query history."""
+
+    @staticmethod
+    def create(user_id: str, query_id: str, query: str, confidence: str, operational_state: str, db: Optional[Session] = None) -> DBQueryHistory:
+        close = False
+        if db is None:
+            db = SessionLocal()
+            close = True
+        try:
+            resolved_id = _resolve_user_id(user_id, db)
+            history = DBQueryHistory(
+                id=str(uuid.uuid4()),
+                user_id=resolved_id,
+                query_id=query_id,
+                query=query,
+                confidence=confidence,
+                operational_state=operational_state,
+            )
+            db.add(history)
+            db.commit()
+            db.refresh(history)
+            return history
+        finally:
+            if close:
+                db.close()
+
+    @staticmethod
+    def list_for_user(user_id: str, limit: int = 50, db: Optional[Session] = None) -> List[DBQueryHistory]:
+        close = False
+        if db is None:
+            db = SessionLocal()
+            close = True
+        try:
+            resolved_id = _resolve_user_id(user_id, db)
+            return (
+                db.query(DBQueryHistory)
+                .filter(DBQueryHistory.user_id == resolved_id)
+                .order_by(DBQueryHistory.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+        finally:
+            if close:
+                db.close()
+
+    @staticmethod
+    def delete_for_user(user_id: str, db: Optional[Session] = None) -> int:
+        close = False
+        if db is None:
+            db = SessionLocal()
+            close = True
+        try:
+            resolved_id = _resolve_user_id(user_id, db)
+            count = (
+                db.query(DBQueryHistory)
+                .filter(DBQueryHistory.user_id == resolved_id)
+                .delete()
+            )
+            db.commit()
+            return count
         finally:
             if close:
                 db.close()

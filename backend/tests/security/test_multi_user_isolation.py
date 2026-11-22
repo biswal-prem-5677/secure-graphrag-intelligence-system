@@ -30,6 +30,7 @@ def auth_tokens():
     if not user_store.user_exists(user_a_name):
         user_store.add_user(
             User(
+                id="test-uuid-alice",
                 username=user_a_name,
                 role=UserRole.analyst,
                 hashed_password=hash_password("AliceSecurePass123!"),
@@ -39,6 +40,7 @@ def auth_tokens():
     if not user_store.user_exists(user_b_name):
         user_store.add_user(
             User(
+                id="test-uuid-bob",
                 username=user_b_name,
                 role=UserRole.analyst,
                 hashed_password=hash_password("BobSecurePass456!"),
@@ -303,3 +305,122 @@ def test_query_cache_user_isolation():
     assert query_cache.get(query_text, user_id="alice_user") == res_alice
     # Bob retrieves his cached result
     assert query_cache.get(query_text, user_id="bob_user") == res_bob
+
+
+def test_identity_lifecycle_and_query_relational_integrity():
+    """
+    Task 4 Integration Test:
+    1. Register a new user.
+    2. Verify a DBUser row exists.
+    3. Verify its id is a UUID and differs from username.
+    4. Login using username/password.
+    5. Obtain JWT.
+    6. Call protected POST /api/v1/query.
+    7. Ensure usage/subscription creation succeeds.
+    8. Ensure subscription.user_id equals DBUser.id.
+    9. Ensure query_history.user_id equals DBUser.id.
+    10. Ensure no username is stored in relational user_id foreign-key columns.
+    11. Ensure the query does not produce a ForeignKeyViolation.
+    """
+    import uuid
+    from app.db.database import SessionLocal
+    from app.db.models import DBUser, DBSubscription, DBQueryHistory
+
+    unique_id = str(uuid.uuid4())[:8]
+    test_username = f"analyst_lifecycle_{unique_id}"
+    test_password = "SecurePassword2026!"
+    test_email = f"lifecycle_{unique_id}@intel.gov"
+
+    # 1. Register new user
+    reg_resp = client.post(
+        "/api/v1/auth/register",
+        json={"username": test_username, "password": test_password, "email": test_email},
+    )
+    assert reg_resp.status_code == 201, reg_resp.text
+
+    # 2 & 3. Verify DBUser row exists, id is UUID and differs from username
+    db = SessionLocal()
+    try:
+        db_user = db.query(DBUser).filter(DBUser.username == test_username).first()
+        assert db_user is not None
+        assert db_user.id != test_username
+        assert len(db_user.id) == 36  # Canonical UUID length
+        canonical_uuid = db_user.id
+
+        # 4 & 5. Login and obtain JWT
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": test_username, "password": test_password},
+        )
+        assert login_resp.status_code == 200
+        token = login_resp.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 6 & 7. Call protected POST /api/v1/query
+        q_resp = client.post(
+            "/api/v1/query",
+            json={"query": "What malware does PHANTOM DRAGON use?"},
+            headers=headers,
+        )
+        assert q_resp.status_code == 200, f"Query failed with: {q_resp.text}"
+
+        # 8. Ensure subscription.user_id equals DBUser.id (canonical UUID)
+        sub = db.query(DBSubscription).filter(DBSubscription.user_id == canonical_uuid).first()
+        assert sub is not None
+        assert sub.user_id == canonical_uuid
+        assert sub.user_id != test_username
+
+        # 9. Ensure query_history.user_id equals DBUser.id
+        q_hist = db.query(DBQueryHistory).filter(DBQueryHistory.user_id == canonical_uuid).first()
+        assert q_hist is not None
+        assert q_hist.user_id == canonical_uuid
+        assert q_hist.user_id != test_username
+
+        # 10. Ensure no username is stored in relational user_id FK columns
+        sub_by_username = db.query(DBSubscription).filter(DBSubscription.user_id == test_username).first()
+        assert sub_by_username is None, "Username must NOT be stored in relational foreign-key column"
+
+        q_by_username = db.query(DBQueryHistory).filter(DBQueryHistory.user_id == test_username).first()
+        assert q_by_username is None, "Username must NOT be stored in query_history foreign-key column"
+
+    finally:
+        db.close()
+
+
+def test_legacy_repository_username_resolution_defense_in_depth(auth_tokens):
+    """
+    Task 5 Verification:
+    Verify that passing a username accidentally through a legacy repository path
+    resolves to the correct DBUser.id (UUID) rather than inserting an invalid FK
+    or creating an unlinked record.
+    """
+    from app.db.database import SessionLocal
+    from app.db.models import DBUser, DBSubscription
+    from app.db.repository import _resolve_user_id, SubscriptionRepository
+
+    db = SessionLocal()
+    try:
+        user_a_name = auth_tokens["user_a"]
+        user_a = db.query(DBUser).filter(DBUser.username == user_a_name).first()
+        assert user_a is not None
+
+        # 1. Directly test _resolve_user_id
+        resolved_from_username = _resolve_user_id(user_a_name, db)
+        assert resolved_from_username == user_a.id
+
+        resolved_from_uuid = _resolve_user_id(user_a.id, db)
+        assert resolved_from_uuid == user_a.id
+
+        # Non-existent identifier returned unchanged, never creates new user
+        unknown_id = "non_existent_user_9999"
+        resolved_unknown = _resolve_user_id(unknown_id, db)
+        assert resolved_unknown == unknown_id
+        assert db.query(DBUser).filter(DBUser.username == unknown_id).first() is None
+
+        # 2. Call repository method with username identifier
+        sub = SubscriptionRepository.get_or_create(user_id=user_a_name, db=db)
+        assert sub.user_id == user_a.id
+        assert sub.user_id != user_a_name
+    finally:
+        db.close()
+

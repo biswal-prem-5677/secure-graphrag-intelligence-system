@@ -4,13 +4,17 @@ import { useState, useCallback } from "react";
 
 interface QueryResult {
   answer: string;
-  confidence: number;
-  evidence: string[];
-  latency_ms: number;
-  provider: string;
-  cost_usd: number;
+  confidence: number | string;
+  evidence?: string[];
+  cited_sources?: string[];
+  latency_ms?: number;
+  stage_timings?: { total_pipeline_ms?: number };
+  provider?: string;
+  cost_usd?: number;
   failure_mode?: string;
+  operational_state?: string;
   graph_entities?: string[];
+  graph_data?: { nodes?: { name?: string; id?: string }[] };
 }
 
 export default function DashboardPage() {
@@ -27,13 +31,22 @@ export default function DashboardPage() {
     setResult(null);
 
     try {
+      const token = typeof window !== "undefined" ? (localStorage.getItem("auth_token") || localStorage.getItem("token")) : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch("/api/v1/query", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ query: query.trim(), session_id: "demo" }),
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error("Authentication required. Please sign in via the 'Sign In / Register' page.");
+        }
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || `Server error ${res.status}`);
       }
@@ -51,12 +64,39 @@ export default function DashboardPage() {
     }
   }, [query, loading]);
 
-  const confidenceClass =
-    result && result.confidence >= 0.8
-      ? "confidence-high"
-      : result && result.confidence >= 0.5
-      ? "confidence-medium"
-      : "confidence-low";
+  const isHighConfidence =
+    typeof result?.confidence === "number"
+      ? result.confidence >= 0.8
+      : result?.confidence === "HIGH";
+  const isMedConfidence =
+    typeof result?.confidence === "number"
+      ? result.confidence >= 0.5
+      : result?.confidence === "MEDIUM";
+  const confidenceClass = isHighConfidence
+    ? "confidence-high"
+    : isMedConfidence
+    ? "confidence-medium"
+    : "confidence-low";
+  const displayConfidence =
+    result?.confidence === undefined || result?.confidence === null
+      ? "—"
+      : typeof result.confidence === "number"
+      ? `${(result.confidence * 100).toFixed(0)}%`
+      : String(result.confidence);
+  const displayLatency =
+    result?.latency_ms ?? (result?.stage_timings?.total_pipeline_ms ? Math.round(result.stage_timings.total_pipeline_ms) : 0);
+  const evidenceList =
+    result?.evidence && result.evidence.length > 0
+      ? result.evidence
+      : result?.cited_sources && result.cited_sources.length > 0
+      ? result.cited_sources
+      : [];
+  const entitiesList =
+    result?.graph_entities && result.graph_entities.length > 0
+      ? result.graph_entities
+      : (result?.graph_data?.nodes || [])
+          .map((n) => n.name || n.id || "")
+          .filter(Boolean);
 
   return (
     <>
@@ -114,35 +154,35 @@ export default function DashboardPage() {
               <div className="result-meta-item">
                 Confidence:{" "}
                 <span className={`confidence-badge ${confidenceClass}`}>
-                  {(result.confidence * 100).toFixed(0)}%
+                  {displayConfidence}
                 </span>
               </div>
               <div className="result-meta-item">
-                Latency: <span className="value">{result.latency_ms}ms</span>
+                Latency: <span className="value">{displayLatency}ms</span>
               </div>
               <div className="result-meta-item">
-                Provider: <span className="value">{result.provider}</span>
+                Provider: <span className="value">{result.provider || "mock"}</span>
               </div>
               <div className="result-meta-item">
                 Cost: <span className="value">${result.cost_usd?.toFixed(5) ?? "0"}</span>
               </div>
-              {result.failure_mode && (
+              {(result.failure_mode || result.operational_state) && (
                 <div className="result-meta-item">
-                  Failure Mode: <span className="tag tag-yellow">{result.failure_mode}</span>
+                  State: <span className="tag tag-yellow">{result.operational_state || result.failure_mode}</span>
                 </div>
               )}
             </div>
 
             {/* Evidence */}
-            {result.evidence && result.evidence.length > 0 && (
+            {evidenceList.length > 0 && (
               <>
                 <div className="card-title" style={{ marginTop: 20 }}>
-                  Evidence Sources ({result.evidence.length})
+                  Evidence Sources ({evidenceList.length})
                 </div>
                 <ul className="evidence-list">
-                  {result.evidence.map((ev, i) => (
+                  {evidenceList.map((ev, i) => (
                     <li key={i} className="evidence-item">
-                      {ev}
+                      {typeof ev === "string" ? ev : JSON.stringify(ev)}
                     </li>
                   ))}
                 </ul>
@@ -150,9 +190,9 @@ export default function DashboardPage() {
             )}
 
             {/* Graph Entities */}
-            {result.graph_entities && result.graph_entities.length > 0 && (
+            {entitiesList.length > 0 && (
               <div style={{ marginTop: 16, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {result.graph_entities.map((e, i) => (
+                {entitiesList.map((e, i) => (
                   <span key={i} className="tag tag-teal">
                     {e}
                   </span>
@@ -170,13 +210,13 @@ export default function DashboardPage() {
           </div>
           <div className="card stat-card">
             <span className="stat-value">
-              {result ? `${(result.confidence * 100).toFixed(0)}%` : "—"}
+              {result ? displayConfidence : "—"}
             </span>
             <span className="stat-label">Last Confidence</span>
           </div>
           <div className="card stat-card">
             <span className="stat-value">
-              {result ? `${result.latency_ms}ms` : "—"}
+              {result ? `${displayLatency}ms` : "—"}
             </span>
             <span className="stat-label">Last Latency</span>
           </div>

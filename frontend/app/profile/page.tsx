@@ -12,22 +12,37 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/v1/profile")
+    const token = typeof window !== "undefined" ? (localStorage.getItem("auth_token") || localStorage.getItem("token")) : null;
+    const savedUser = typeof window !== "undefined" ? (localStorage.getItem("auth_username") || "analyst") : "analyst";
+    const savedRole = typeof window !== "undefined" ? (localStorage.getItem("auth_role") || "analyst") : "analyst";
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    fetch("/api/v1/profile", { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) =>
         setProfile(
-          data || {
-            username: "analyst",
-            role: "user",
-            created_at: new Date().toISOString(),
-            email: "",
-          }
+          data
+            ? {
+                username: data.username || data.display_name || savedUser,
+                role: data.role || data.role_title || savedRole,
+                created_at: data.created_at || new Date().toISOString(),
+                email: data.email || "",
+              }
+            : {
+                username: savedUser,
+                role: savedRole,
+                created_at: new Date().toISOString(),
+                email: "",
+              }
         )
       )
       .catch(() =>
         setProfile({
-          username: "analyst",
-          role: "user",
+          username: savedUser,
+          role: savedRole,
           created_at: new Date().toISOString(),
           email: "",
         })

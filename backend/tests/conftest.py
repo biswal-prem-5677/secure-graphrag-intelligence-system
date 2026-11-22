@@ -71,6 +71,36 @@ def reset_test_state():
             db.close()
 
         seed_default_users()
+
+        from app.models.user import User, UserRole, user_store
+        from app.security.auth import hash_password
+        import uuid
+        unit_test_users = [
+            "billing_analyst",
+            "analyst_prod",
+            "analyst_1",
+            "analyst_2",
+            "analyst_fb",
+            "user_a",
+            "user_b",
+            "analyst_concise",
+            "user_gdpr",
+            "user_test",
+            "user_1",
+            "user_2",
+            "user_x",
+        ]
+        for uname in unit_test_users:
+            if not user_store.user_exists(uname):
+                user_store.add_user(
+                    User(
+                        id=f"test-uuid-{uname}",
+                        username=uname,
+                        role=UserRole.analyst,
+                        hashed_password=hash_password("TestPass123!"),
+                        email=f"{uname}@test.local",
+                    )
+                )
     except Exception:
         pass
 
