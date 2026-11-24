@@ -14,7 +14,12 @@ from app.llm.provider import BaseLLMProvider
 
 
 def get_llm_provider() -> BaseLLMProvider:
-    """Instantiate the active LLM provider from settings."""
+    """Instantiate the active LLM provider from settings.
+
+    In production, multi-provider failover chains across real configured providers
+    (Ollama -> Gemini -> Groq -> OpenAI) and fails explicitly with a provider error
+    if all fail. Canned mock generation is never silently returned in production.
+    """
     provider_type = settings.LLM_PROVIDER.lower().strip()
 
     if provider_type == "mock":
@@ -28,17 +33,28 @@ def get_llm_provider() -> BaseLLMProvider:
     elif provider_type == "openai":
         return OpenAIProvider()
     elif provider_type == "multi":
-        # Free-first fallback ordering: Ollama (local) -> Gemini (free tier) -> Groq (free tier) -> Mock
         chain: list[BaseLLMProvider] = []
-        if settings.OLLAMA_BASE_URL:
+        if getattr(settings, "OLLAMA_BASE_URL", None):
             chain.append(OllamaProvider())
-        if settings.GOOGLE_API_KEY:
+        if getattr(settings, "GOOGLE_API_KEY", None):
             chain.append(GeminiProvider())
-        if settings.GROQ_API_KEY:
+        if getattr(settings, "GROQ_API_KEY", None):
             chain.append(GroqProvider())
-        if settings.OPENAI_API_KEY:
+        if getattr(settings, "OPENAI_API_KEY", None):
             chain.append(OpenAIProvider())
-        chain.append(MockLLMProvider())
+
+        # In non-production development/testing, allow mock fallback if no real keys are set
+        if not chain:
+            logger.info("no_cloud_llm_keys_configured_using_deterministic_mock")
+            return MockLLMProvider()
+
+        # Only append mock to the fallback chain in dev if explicitly requested
+        is_prod = getattr(settings, "ENVIRONMENT", "development") == "production"
+        if not is_prod and getattr(settings, "ENABLE_DEV_MOCK_FALLBACK", False):
+            chain.append(MockLLMProvider())
+
         return FallbackMultiProvider(chain)
     else:
+        if getattr(settings, "ENVIRONMENT", "development") == "production":
+            raise ValueError(f"Unknown or unsupported LLM_PROVIDER '{provider_type}' in production.")
         return MockLLMProvider()

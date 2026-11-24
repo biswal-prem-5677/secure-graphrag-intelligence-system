@@ -2,6 +2,35 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.3.0] - 2026-11-24
+
+### Added
+- **Public MITRE ATT&CK STIX 2.1 Knowledge Base & Ingestion**:
+  - Ingested 110 real MITRE ATT&CK entities (20 threat actors including APT28, APT29, Lazarus Group, Sandworm Team, Volt Typhoon, Scattered Spider, FIN7; 24 malware and tools including Cobalt Strike, Mimikatz, BlackCat, Industroyer, HermeticWiper; 36 ATT&CK techniques; 10 CVEs; 10 target sectors; 10 mitigations), 87 verified relationships, and 12 primary source CTI evidence records into `backend/app/graph/mitre_attack_stix21.json`.
+  - Built standalone STIX 2.1 Neo4j batch ingester `backend/app/graph/mitre_ingest.py` with schema indexing and MERGE queries.
+  - Enhanced `GraphRetriever` to dynamically resolve both canonical test fixtures and MITRE ATT&CK entities seamlessly.
+- **105-Query Multi-Hop Benchmark & Comparative Plain Vector-RAG Baseline**:
+  - Curated `evaluation/datasets/mitre_multihop_100.jsonl` with 105 multi-hop threat intelligence tasks across 2-hop, 3-hop, 4-hop actor-tool-technique chains, and adversarial ungrounded refusal probes.
+  - Implemented and executed `evaluation/runners/run_vector_baseline.py` comparing Secure GraphRAG against a plain Vector-RAG baseline (TF-IDF/BM25 over chunked CTI corpus).
+  - Committed verified benchmark output to `evaluation/results/evaluation_results.json` and `evaluation/results/evaluation_results.md` showing GraphRAG achieving **67.3% multi-hop recall** vs **56.5% for vector search (+10.8% advantage)** and **0.89 faithfulness** vs **0.53 (+35.7% advantage)**.
+- **Interactive Live Investigation Demo CLI**:
+  - Created `scripts/demo_investigation.py` showcasing end-to-end multi-hop graph traversal, cross-campaign lateral movement analysis, and anti-hallucination guardrails with interactive investigation query support.
+- **Hand-Labeled Claim Verifier Benchmark**:
+  - Added `backend/tests/unit/test_claim_verifier_benchmark.py` measuring verifier precision, recall, and F1 across 23 hand-labeled threat intelligence claims without artificial blacklists.
+
+### Changed
+- **Anti-Hallucination Claim Verifier Overhaul (Zero Test Leakage)**:
+  - Completely removed hardcoded blacklist tokens (`"stuxnet"`, `"fictional_alien_botnet"`, `"2029"`, `"centrifuges"`) and weak 15% word overlap heuristics from `backend/app/evaluation/claim_verifier.py`.
+  - Replaced with structural candidate entity extraction (regex patterns for CVEs, IPs, ATT&CK IDs, proper noun phrases) and entity-relation topological grounding against retrieved graph context and CTI evidence records.
+- **Explicit LLM Provider Failure Handling & Documentation Alignment**:
+  - Updated `backend/app/llm/factory.py` so multi-provider fallback chains fail explicitly with `OperationalState.LLM_PROVIDER_ERROR` (HTTP 503) instead of silently returning mock answers when real providers are exhausted. Mock provider is restricted strictly to local dev/test environments with `LLM_PROVIDER=mock`.
+  - Corrected `docs/ARCHITECTURE.md` Section 4 to reflect the accurate fallback chain: `Ollama (local) -> Gemini (free-tier) -> Groq -> OpenAI -> Explicit Error`.
+- **Clean Clone Resilience & Evaluation Runner Fix**:
+  - Enhanced `backend/app/db/repository.py` to auto-seed default user records in non-production environments, eliminating `IntegrityError: FOREIGN KEY constraint failed` when running tests or benchmarks on fresh databases.
+  - Updated `evaluation/runners/run_full_eval.py` to initialize tables, seed default users, and output to `evaluation/results/` cleanly on fresh clones.
+  - Updated `UsageTracker` and `QueryService` to grant unlimited quota for evaluation runners (`eval_user`, `admin`).
+  - Added 30-second cooldown on failed Neo4j connection attempts in `Neo4jClient.is_healthy()` to eliminate connection timeouts during offline evaluation runs.
+
 ## [1.2.0] - 2026-09-08
 
 ### Added

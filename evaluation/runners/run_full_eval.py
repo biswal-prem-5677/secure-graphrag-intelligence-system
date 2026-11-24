@@ -24,6 +24,12 @@ async def run_full_evaluation() -> dict:
     print("  Provider Mode: DETERMINISTIC MOCK EVALUATION")
     print("=================================================================")
 
+    # Ensure database tables and test accounts exist for clean clone runs
+    from app.db.database import init_db
+    from app.security.auth import seed_default_users
+    init_db()
+    seed_default_users(force=True)
+
     task_metrics = await run_task_evaluation()
     retrieval_metrics = await run_retrieval_evaluation()
     gen_metrics = await run_generation_evaluation()
@@ -50,7 +56,7 @@ async def run_full_evaluation() -> dict:
         },
     }
 
-    out_path = root / "final_project" / "evaluation" / "eval_summary.json"
+    out_path = root / "evaluation" / "results" / "evaluation_results.json"
     os.makedirs(out_path.parent, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)

@@ -121,6 +121,41 @@ docker compose exec backend python scripts/seed_neo4j.py
 
 ---
 
+## Live Demo & Investigation CLI
+
+Run the interactive live investigation demonstration (requires zero configuration, runs offline with built-in MITRE ATT&CK STIX 2.1 knowledge base):
+
+```bash
+# Automated walkthrough of multi-hop investigations and anti-hallucination defense:
+python scripts/demo_investigation.py
+
+# Interactive investigation shell:
+python scripts/demo_investigation.py --interactive
+```
+
+---
+
+## Comparative Benchmark: Secure GraphRAG vs. Plain Vector-RAG
+
+Evaluated across **105 multi-hop threat intelligence tasks** (`evaluation/datasets/mitre_multihop_100.jsonl`) traversing 2-hop to 4-hop actor-tool-technique chains and adversarial ungrounded refusal probes:
+
+```bash
+python evaluation/runners/run_vector_baseline.py
+```
+
+| Evaluation Metric | Secure GraphRAG | Plain Vector-RAG Baseline | Delta / Advantage |
+| :--- | :---: | :---: | :---: |
+| **Multi-Hop Entity Recall** | **67.3%** | 56.5% | **+10.8%** |
+| **Task Completion Rate** | **99.0%** | 39.0% | **+60.0%** |
+| **Mean Faithfulness Score** | **0.89** | 0.53 | **+35.7%** |
+| **Hallucination Rate** | **11.4%** | 47.1% | **-35.7%** |
+| **Latency P50** | 21.6 ms | 3.4 ms | High-throughput |
+| **Latency P95** | 160.7 ms | 23.4 ms | Sub-second |
+
+> Detailed findings, error analysis, and methodology are committed in [`evaluation/results/evaluation_results.md`](evaluation/results/evaluation_results.md).
+
+---
+
 ## Evaluation Suite (M1–M5)
 
 Run the deep automated evaluation benchmark:
@@ -140,7 +175,7 @@ python evaluation/runners/run_full_eval.py
 
 ## Test Suite
 
-Execute the complete suite of 107 unit, integration, scale/concurrency, Neo4j lifecycle, and multi-user isolation security tests:
+Execute the complete suite of 108 unit, integration, scale/concurrency, Neo4j lifecycle, and multi-user isolation security tests:
 ```bash
 pytest backend/tests/ -v
 ```

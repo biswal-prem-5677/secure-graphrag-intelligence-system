@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "timestamp": "2026-11-24T06:59:18.657798+00:00",
+    "provider_mode": "DETERMINISTIC MOCK EVALUATION",
+    "real_llm_status": "NOT VERIFIED (Requires External API Keys: GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY)",
+    "graph_mode": "IN-MEMORY CANONICAL THREAT GRAPH"
+  },
+  "m1_m5_primary_metrics": {
+    "m1_task_completion_rate": 0.8,
+    "m2_faithfulness": 0.4,
+    "m3_hallucination_rate": 0.6,
+    "m4_mean_cost_per_task": 0.0,
+    "m5_escalation_rate": 0.4,
+    "appropriate_escalation_rate": 1.0
+  },
+  "retrieval": {
+    "mean_mrr": 1.0
+  },
+  "generation": {
+    "mean_grounding": 0.5
+  },
+  "security": {
+    "security_filter_accuracy": 1.0
+  },
+  "memory": {
+    "anaphora_accuracy": 1.0
+  },
+  "ci_quality_gates": {
+    "m1_task_completion_passed": true,
+    "m2_faithfulness_passed": false,
+    "m3_hallucination_passed": false,
+    "security_filter_passed": true
+  }
+}

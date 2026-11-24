@@ -11,7 +11,7 @@ from typing import Any, Dict, Tuple
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.graph.client import neo4j_client
-from app.retrieval.graph_retriever import OFFLINE_GRAPH_DATA
+from app.retrieval.graph_retriever import OFFLINE_GRAPH_DATA, graph_retriever
 
 logger = get_logger("graph_seed")
 
@@ -46,8 +46,9 @@ async def seed_database() -> Dict[str, Any]:
                 # Some Neo4j editions or configurations may log index warnings
                 logger.warning("neo4j_index_creation_warning", query=iq, error=str(e))
 
-        # 2. Seed Nodes (Idempotent MERGE)
-        nodes = OFFLINE_GRAPH_DATA.get("nodes", [])
+        # 2. Seed Nodes (Idempotent MERGE from full MITRE STIX & Canonical Graph)
+        dataset = graph_retriever._get_offline_data()
+        nodes = dataset.get("nodes", [])
         for node in nodes:
             label = node.get("label", "Entity")
             # Sanitize label to alphanumeric only for safety
@@ -67,7 +68,7 @@ async def seed_database() -> Dict[str, Any]:
             )
 
         # 3. Seed Edges (Idempotent MERGE)
-        edges = OFFLINE_GRAPH_DATA.get("edges", [])
+        edges = dataset.get("edges", [])
         for edge in edges:
             rel_type = edge.get("type", "RELATED_TO")
             safe_type = "".join(c for c in rel_type if c.isalnum() or c == "_")
@@ -86,7 +87,7 @@ async def seed_database() -> Dict[str, Any]:
             )
 
         # 4. Seed Evidence Records
-        evidence_list = OFFLINE_GRAPH_DATA.get("evidence", [])
+        evidence_list = dataset.get("evidence", [])
         for ev in evidence_list:
             query = """
             MERGE (e:Evidence {id: $source_id})

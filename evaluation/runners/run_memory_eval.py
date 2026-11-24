@@ -4,14 +4,14 @@ import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(root / "final_project" / "backend"))
-sys.path.insert(0, str(root / "final_project"))
+sys.path.insert(0, str(root / "backend"))
+sys.path.insert(0, str(root))
 
 from app.services.memory_service import memory_service
 
 
 async def run_memory_evaluation() -> dict:
-    data_file = root / "final_project" / "evaluation" / "datasets" / "memory_eval.jsonl"
+    data_file = root / "evaluation" / "datasets" / "memory_eval.jsonl"
     if not data_file.exists():
         data_file = Path("evaluation/datasets/memory_eval.jsonl")
 

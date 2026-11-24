@@ -87,14 +87,35 @@ class GraphRetriever:
     """Safely traverses Neo4j with bounded depth, entity resolution, and evidence collection."""
 
     def _get_offline_data(self) -> Dict[str, Any]:
+        mitre_file = Path(__file__).resolve().parent.parent / "graph" / "mitre_attack_stix21.json"
+        if not mitre_file.exists():
+            mitre_file = Path("backend/app/graph/mitre_attack_stix21.json")
         data_file = Path("threat_intel_data.json")
-        if data_file.exists():
+
+        combined_nodes = list(OFFLINE_GRAPH_DATA.get("nodes", []))
+        combined_edges = list(OFFLINE_GRAPH_DATA.get("edges", []))
+        combined_evidence = list(OFFLINE_GRAPH_DATA.get("evidence", []))
+        seen_node_ids = {n["id"] for n in combined_nodes}
+
+        target_file = mitre_file if mitre_file.exists() else (data_file if data_file.exists() else None)
+        if target_file and target_file.exists():
             try:
-                with open(data_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return OFFLINE_GRAPH_DATA
+                with open(target_file, "r", encoding="utf-8") as f:
+                    file_data = json.load(f)
+                    for n in file_data.get("nodes", []):
+                        if n["id"] not in seen_node_ids:
+                            combined_nodes.append(n)
+                            seen_node_ids.add(n["id"])
+                    combined_edges.extend(file_data.get("edges", []))
+                    combined_evidence.extend(file_data.get("evidence", []))
+            except Exception as e:
+                logger.warning("failed_loading_offline_mitre_graph", error=str(e))
+
+        return {
+            "nodes": combined_nodes,
+            "edges": combined_edges,
+            "evidence": combined_evidence,
+        }
 
     async def resolve_entities(self, entity_names: List[str]) -> List[GraphNode]:
         """Resolve entity names to nodes in the graph (with offline fallback)."""
@@ -119,8 +140,17 @@ class GraphRetriever:
         if not nodes:
             data = self._get_offline_data()
             for name in entity_names:
+                name_l = name.lower()
                 for n in data["nodes"]:
-                    if name.lower() in n["name"].lower() or n["id"].lower() == name.lower():
+                    n_name_l = n["name"].lower()
+                    n_id_l = n["id"].lower()
+                    if (
+                        name_l == n_name_l
+                        or name_l == n_id_l
+                        or (len(name_l) >= 3 and name_l in n_name_l)
+                        or (len(n_name_l) >= 4 and n_name_l in name_l)
+                        or (name_l.startswith("t1") and name_l in n_id_l)
+                    ):
                         nodes.append(
                             GraphNode(id=n["id"], name=n["name"], label=n["label"], properties=n.get("properties", {}))
                         )
@@ -159,14 +189,11 @@ class GraphRetriever:
 
         # Find connected edges up to max_depth
         frontier = set(matched_ids)
-        for _ in range(max_depth):
+        for _ in range(max(1, max_depth)):
             next_frontier = set()
             for edge in data["edges"]:
                 s, t, rel_type = edge["source"], edge["target"], edge["type"]
                 if s in frontier or t in frontier:
-                    # Filter by intended_rels if specified
-                    if intended_rels and rel_type not in intended_rels and len(sub_edges) > 5:
-                        continue
                     edge_obj = GraphEdge(source=s, target=t, type=rel_type, properties=edge.get("properties", {}))
                     if edge_obj not in sub_edges:
                         sub_edges.append(edge_obj)
@@ -188,20 +215,28 @@ class GraphRetriever:
         # Gather evidence
         evidence_records: List[EvidenceRecord] = []
         for ev in data.get("evidence", []):
-            # Include relevant evidence
-            for name in entity_names:
-                if name.lower() in ev["summary"].lower() or name.lower() in ev["title"].lower():
-                    evidence_records.append(
-                        EvidenceRecord(
-                            source_id=ev["source_id"],
-                            title=ev["title"],
-                            source_type=ev["source_type"],
-                            confidence=ev["confidence"],
-                            summary=ev["summary"],
-                            date=ev.get("date"),
-                        )
-                    )
+            ev_text = (ev.get("summary", "") + " " + ev.get("title", "")).lower()
+            relevant = False
+            for n in sub_nodes.values():
+                if n.name.lower() in ev_text or n.id.lower() in ev_text:
+                    relevant = True
                     break
+            if not relevant:
+                for name in entity_names:
+                    if name.lower() in ev_text:
+                        relevant = True
+                        break
+            if relevant:
+                evidence_records.append(
+                    EvidenceRecord(
+                        source_id=ev["source_id"],
+                        title=ev["title"],
+                        source_type=ev["source_type"],
+                        confidence=ev["confidence"],
+                        summary=ev["summary"],
+                        date=ev.get("date"),
+                    )
+                )
 
         return RetrievalResult(
             graph_data=GraphData(nodes=list(sub_nodes.values()), edges=sub_edges),

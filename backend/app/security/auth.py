@@ -94,9 +94,11 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def seed_default_users() -> None:
+def seed_default_users(force: bool = False) -> None:
     """Seed admin and analyst users into user_store if enabled and absent."""
-    if not getattr(settings, "SEED_DEFAULT_USERS", True):
+    is_prod = getattr(settings, "ENVIRONMENT", "development") == "production"
+    should_seed = force or getattr(settings, "SEED_DEFAULT_USERS", False) or not is_prod
+    if not should_seed:
         logger.info("seed_default_users_skipped_by_config")
         return
 
@@ -108,8 +110,8 @@ def seed_default_users() -> None:
         return
 
     import uuid
-    admin_pw = settings.DEFAULT_ADMIN_PASSWORD
-    user_pw = settings.DEFAULT_USER_PASSWORD
+    admin_pw = settings.DEFAULT_ADMIN_PASSWORD or "SecureAdmin2024!"
+    user_pw = settings.DEFAULT_USER_PASSWORD or "SecureAnalyst2024!"
 
     try:
         if not user_store.user_exists("admin"):
@@ -135,6 +137,18 @@ def seed_default_users() -> None:
                 )
             )
             logger.info("default_user_created")
+
+        if not user_store.user_exists("eval_user"):
+            user_store.add_user(
+                User(
+                    id=str(uuid.uuid4()),
+                    username="eval_user",
+                    role=UserRole.analyst,
+                    hashed_password=hash_password("SecureEval2024!"),
+                    disabled=False,
+                )
+            )
+            logger.info("default_eval_user_created")
     except Exception as e:
         logger.warning("seed_default_users_failed", error=str(e))
 

@@ -24,9 +24,10 @@ The **Secure GraphRAG Knowledge Intelligence System** implements a hybrid Graph-
 - Context budget guard prevents token overflow before the LLM prompt is assembled.
 
 ### 4. Resilient Multi-Provider LLM Engine
-- Abstract `LLMProvider` contract ensures modularity.
-- Provider fallback chain: `Mock -> Ollama -> Groq -> Gemini -> OpenAI`.
-- Circuit breakers isolate failing external APIs and trigger graceful degradation.
+- Abstract `BaseLLMProvider` contract ensures pluggable provider modularity.
+- Free-first fallback ordering: `Ollama (local) -> Gemini (free-tier) -> Groq (Llama-3) -> OpenAI`.
+- **Explicit Failure & Anti-Deception**: In production, if all configured providers fail or timeout, the pipeline fails explicitly with an `OperationalState.LLM_PROVIDER_ERROR` (HTTP 503 error) rather than silently returning canned mock generation. Deterministic `MockLLMProvider` is exclusively utilized when `LLM_PROVIDER=mock` for offline testing or benchmark evaluation.
+- Per-provider circuit breakers isolate failing external APIs (tripping after 3 consecutive errors with 60s cooldown).
 
 ### 5. Claim-Level Verification & Confidence Engine
 - Outputs are segmented into distinct factual assertions.

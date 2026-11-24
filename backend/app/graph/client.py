@@ -24,6 +24,8 @@ class Neo4jClient:
         self.driver: Optional[AsyncDriver] = None
         self._connected = False
         self._lock: Optional[asyncio.Lock] = None
+        self._last_connect_failure_time: float = 0.0
+        self._cooldown_seconds: float = 30.0
 
     @property
     def is_connected(self) -> bool:
@@ -72,6 +74,8 @@ class Neo4jClient:
         except Exception as e:
             logger.warning("neo4j_connection_failed", uri=self.uri, error=str(e))
             self._connected = False
+            import time
+            self._last_connect_failure_time = time.time()
             return False
 
     async def reconnect(self) -> bool:
@@ -98,13 +102,17 @@ class Neo4jClient:
                 logger.info("neo4j_disconnected")
 
     async def is_healthy(self) -> bool:
-        """Check if Neo4j is reachable. Reuses existing driver if connected; controlled reconnect otherwise."""
+        """Check if Neo4j is reachable. Reuses existing driver if connected; respects cooldown on failed attempts."""
         if self.driver and self._connected:
             try:
                 await self.driver.verify_connectivity()
                 return True
             except Exception:
                 self._connected = False
+
+        import time
+        if not self._connected and (time.time() - self._last_connect_failure_time < self._cooldown_seconds):
+            return False
 
         return await self.reconnect()
 
