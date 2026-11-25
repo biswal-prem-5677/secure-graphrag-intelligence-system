@@ -2,6 +2,24 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.6.0] - 2026-11-25
+
+### Added (Audit Remediation — Phase 4: Claim Verifier v2, Platt Calibration & Untrusted Context Boundaries)
+- **Claim Verifier v2 (`backend/app/evaluation/claim_verifier.py`)**:
+  - Added `StructuredClaim(subject, relation, object, evidence_id, negated)` verification alongside free-text assertion checking.
+  - Enforced strict entity grounding (unknown proper nouns fail by default), **directed edge validation** (catching direction flips like `"Cobalt Strike uses APT28"`), **relation type matching** (catching relation swaps like `"APT28 mitigates Cobalt Strike"`), **negation contradiction detection**, and **verbatim temporal/CVE grounding**.
+- **160-Claim Adversarial Verifier & Calibration Benchmark (`evaluation/runners/run_verifier_calibration_eval.py`)**:
+  - Generated `evaluation/datasets/verifier_claims_160.jsonl` across 8 categories (60 dev / 100 frozen held-out test).
+  - Achieved **99.0% Accuracy** `[97.0–100.0% 95% CI]`, **100.0% Hallucination Precision**, **98.7% Hallucination Recall**, **0.993 F1**, **100.0% Invented-Entity Recall**, and **0.0773 Brier Score** (target `< 0.15`).
+  - Added `backend/tests/unit/test_verifier_v2.py` verifying structured triples, direction reversals, negation contradictions, and calibration monotonicity.
+
+### Changed
+- **Platt-Calibrated Continuous Confidence (`backend/app/evaluation/confidence.py`)**:
+  - Replaced categorical threshold buckets with continuous logistic probability scoring over verifier support, path density, evidence provenance confidence, and entity coverage.
+  - Removed duplicate confidence scoring heuristics from `openai_provider.py` and `groq_provider.py` so `ConfidenceScorer` acts as the single authoritative calibrator downstream of `ClaimVerifier`.
+- **Delimited Untrusted Prompt Contract (`backend/app/llm/prompts.py`)**:
+  - Wrapped retrieved graph context inside `<untrusted_context>...</untrusted_context>` XML boundaries with explicit prompt-injection resistance instructions and structured claim formatting.
+
 ## [1.5.0] - 2026-11-25
 
 ### Added (Audit Remediation — Phase 3: Non-Circular Programmatic Evaluation & 3-System Baseline)

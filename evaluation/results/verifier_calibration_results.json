@@ -1,0 +1,24 @@
+{
+  "total_claims": 100,
+  "hallucination_precision": 1.0,
+  "hallucination_recall": 0.987,
+  "hallucination_f1": 0.993,
+  "accuracy": 0.99,
+  "accuracy_95ci": [
+    0.97,
+    1.0
+  ],
+  "brier_score": 0.0773,
+  "ece": 0.2484,
+  "per_category_accuracy": {
+    "direction_flip": 0.9,
+    "entity_swap": 1.0,
+    "grounded_direct": 1.0,
+    "grounded_multi_hop": 1.0,
+    "invented_date_or_cve": 1.0,
+    "invented_entity": 1.0,
+    "negation_contradiction": 1.0,
+    "relation_swap": 1.0
+  },
+  "failure_count": 1
+}

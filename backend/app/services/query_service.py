@@ -327,6 +327,7 @@ class QueryService:
             retrieval_res.relationship_paths,
             retrieval_res.evidence_records,
             is_insufficient_answer=(conf_level_override := "insufficient evidence" in answer_text.lower()),
+            faithfulness_score=claim_res.faithfulness_score,
         )
 
         # Evaluate escalation post-retrieval

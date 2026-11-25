@@ -1,0 +1,160 @@
+{"id": "gd-11", "category": "grounded_direct", "claim": "Ke3chang deploys Okrum in observed intrusions.", "expected_supported": true}
+{"id": "rs-14", "category": "relation_swap", "claim": "Elderwood mitigates Vasport in enterprise defense.", "expected_supported": false}
+{"id": "es-11", "category": "entity_swap", "claim": "Ke3chang deployed HDoor during operations.", "expected_supported": false}
+{"id": "es-14", "category": "entity_swap", "claim": "Elderwood deployed HDoor during operations.", "expected_supported": false}
+{"id": "nc-18", "category": "negation_contradiction", "claim": "APT1 did not use gsecdump in any campaign.", "expected_supported": false}
+{"id": "df-06", "category": "direction_flip", "claim": "schtasks uses APT3 in targeted campaigns.", "expected_supported": false}
+{"id": "id-04", "category": "invented_date_or_cve", "claim": "Akira deployed PsExec via CVE-1989-9999 in 1989.", "expected_supported": false}
+{"id": "ie-03", "category": "invented_entity", "claim": "Gamaredon Group utilized ShadowRootkit for persistence.", "expected_supported": false}
+{"id": "rs-02", "category": "relation_swap", "claim": "Mustang Panda mitigates PUBLOAD in enterprise defense.", "expected_supported": false}
+{"id": "df-17", "category": "direction_flip", "claim": "FakeM uses Scarlet Mimic in targeted campaigns.", "expected_supported": false}
+{"id": "gd-19", "category": "grounded_direct", "claim": "BlackByte deploys BlackByte 2.0 Ransomware in observed intrusions.", "expected_supported": true}
+{"id": "gm-17", "category": "grounded_multi_hop", "claim": "Pre-compromise mitigates Virtual Private Server according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "ie-02", "category": "invented_entity", "claim": "Mustang Panda utilized PhantomWorm for persistence.", "expected_supported": false}
+{"id": "id-18", "category": "invented_date_or_cve", "claim": "APT1 deployed gsecdump via CVE-2099-9999 in 2099.", "expected_supported": false}
+{"id": "df-05", "category": "direction_flip", "claim": "Mispadu uses Malteiro in targeted campaigns.", "expected_supported": false}
+{"id": "gd-14", "category": "grounded_direct", "claim": "Elderwood deploys Vasport in observed intrusions.", "expected_supported": true}
+{"id": "rs-16", "category": "relation_swap", "claim": "TA551 mitigates Ursnif in enterprise defense.", "expected_supported": false}
+{"id": "df-11", "category": "direction_flip", "claim": "Okrum uses Ke3chang in targeted campaigns.", "expected_supported": false}
+{"id": "df-13", "category": "direction_flip", "claim": "DropBook uses Molerats in targeted campaigns.", "expected_supported": false}
+{"id": "gm-07", "category": "grounded_multi_hop", "claim": "Limit Access to Resource Over Network mitigates Hardware Additions according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "df-20", "category": "direction_flip", "claim": "PsExec uses APT1 in targeted campaigns.", "expected_supported": false}
+{"id": "es-20", "category": "entity_swap", "claim": "APT1 deployed HDoor during operations.", "expected_supported": false}
+{"id": "df-02", "category": "direction_flip", "claim": "PUBLOAD uses Mustang Panda in targeted campaigns.", "expected_supported": false}
+{"id": "nc-14", "category": "negation_contradiction", "claim": "Elderwood did not use Vasport in any campaign.", "expected_supported": false}
+{"id": "es-07", "category": "entity_swap", "claim": "Indrik Spider deployed HDoor during operations.", "expected_supported": false}
+{"id": "es-01", "category": "entity_swap", "claim": "Ke3chang deployed HDoor during operations.", "expected_supported": false}
+{"id": "es-05", "category": "entity_swap", "claim": "Malteiro deployed HDoor during operations.", "expected_supported": false}
+{"id": "nc-16", "category": "negation_contradiction", "claim": "TA551 did not use Ursnif in any campaign.", "expected_supported": false}
+{"id": "nc-01", "category": "negation_contradiction", "claim": "Ke3chang did not use spwebmember in any campaign.", "expected_supported": false}
+{"id": "rs-10", "category": "relation_swap", "claim": "APT5 mitigates PULSECHECK in enterprise defense.", "expected_supported": false}
+{"id": "gd-18", "category": "grounded_direct", "claim": "APT1 deploys gsecdump in observed intrusions.", "expected_supported": true}
+{"id": "nc-20", "category": "negation_contradiction", "claim": "APT1 did not use PsExec in any campaign.", "expected_supported": false}
+{"id": "gm-14", "category": "grounded_multi_hop", "claim": "Audit mitigates Credentials in Registry according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "nc-19", "category": "negation_contradiction", "claim": "BlackByte did not use BlackByte 2.0 Ransomware in any campaign.", "expected_supported": false}
+{"id": "df-08", "category": "direction_flip", "claim": "StrifeWater uses Moses Staff in targeted campaigns.", "expected_supported": false}
+{"id": "ie-13", "category": "invented_entity", "claim": "Molerats utilized AuroraBotnet for persistence.", "expected_supported": false}
+{"id": "nc-05", "category": "negation_contradiction", "claim": "Malteiro did not use Mispadu in any campaign.", "expected_supported": false}
+{"id": "gm-11", "category": "grounded_multi_hop", "claim": "Pre-compromise mitigates Social Media Accounts according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "nc-17", "category": "negation_contradiction", "claim": "Scarlet Mimic did not use FakeM in any campaign.", "expected_supported": false}
+{"id": "df-04", "category": "direction_flip", "claim": "PsExec uses Akira in targeted campaigns.", "expected_supported": false}
+{"id": "id-14", "category": "invented_date_or_cve", "claim": "Elderwood deployed Vasport via CVE-2031-9999 in 2031.", "expected_supported": false}
+{"id": "gm-01", "category": "grounded_multi_hop", "claim": "Execution Prevention mitigates Unix Shell according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "ie-11", "category": "invented_entity", "claim": "Ke3chang utilized RiftBackdoor for persistence.", "expected_supported": false}
+{"id": "nc-15", "category": "negation_contradiction", "claim": "Transparent Tribe did not use Crimson in any campaign.", "expected_supported": false}
+{"id": "gd-15", "category": "grounded_direct", "claim": "Transparent Tribe deploys Crimson in observed intrusions.", "expected_supported": true}
+{"id": "gm-05", "category": "grounded_multi_hop", "claim": "Disable or Remove Feature or Program mitigates VNC according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "id-16", "category": "invented_date_or_cve", "claim": "TA551 deployed Ursnif via CVE-1989-9999 in 1989.", "expected_supported": false}
+{"id": "rs-18", "category": "relation_swap", "claim": "APT1 mitigates gsecdump in enterprise defense.", "expected_supported": false}
+{"id": "rs-13", "category": "relation_swap", "claim": "Molerats mitigates DropBook in enterprise defense.", "expected_supported": false}
+{"id": "gm-15", "category": "grounded_multi_hop", "claim": "Software Configuration mitigates Spearphishing Attachment according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "nc-03", "category": "negation_contradiction", "claim": "Gamaredon Group did not use Pteranodon in any campaign.", "expected_supported": false}
+{"id": "df-14", "category": "direction_flip", "claim": "Vasport uses Elderwood in targeted campaigns.", "expected_supported": false}
+{"id": "gm-19", "category": "grounded_multi_hop", "claim": "Pre-compromise mitigates Digital Certificates according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gm-18", "category": "grounded_multi_hop", "claim": "User Account Management mitigates Trust Modification according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "ie-06", "category": "invented_entity", "claim": "APT3 utilized ChronosWiper for persistence.", "expected_supported": false}
+{"id": "es-06", "category": "entity_swap", "claim": "APT3 deployed HDoor during operations.", "expected_supported": false}
+{"id": "es-19", "category": "entity_swap", "claim": "BlackByte deployed HDoor during operations.", "expected_supported": false}
+{"id": "gd-12", "category": "grounded_direct", "claim": "APT3 deploys RemoteCMD in observed intrusions.", "expected_supported": true}
+{"id": "gd-04", "category": "grounded_direct", "claim": "Akira deploys PsExec in observed intrusions.", "expected_supported": true}
+{"id": "gm-12", "category": "grounded_multi_hop", "claim": "Audit mitigates Malicious Image according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gd-20", "category": "grounded_direct", "claim": "APT1 deploys PsExec in observed intrusions.", "expected_supported": true}
+{"id": "ie-17", "category": "invented_entity", "claim": "Scarlet Mimic utilized HyperionSpy for persistence.", "expected_supported": false}
+{"id": "rs-04", "category": "relation_swap", "claim": "Akira mitigates PsExec in enterprise defense.", "expected_supported": false}
+{"id": "gd-07", "category": "grounded_direct", "claim": "Indrik Spider deploys Cobalt Strike in observed intrusions.", "expected_supported": true}
+{"id": "id-06", "category": "invented_date_or_cve", "claim": "APT3 deployed schtasks via CVE-2099-9999 in 2099.", "expected_supported": false}
+{"id": "df-12", "category": "direction_flip", "claim": "RemoteCMD uses APT3 in targeted campaigns.", "expected_supported": false}
+{"id": "gm-03", "category": "grounded_multi_hop", "claim": "Privileged Account Management mitigates Domain Controller Authentication according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "id-03", "category": "invented_date_or_cve", "claim": "Gamaredon Group deployed Pteranodon via CVE-2035-9999 in 2035.", "expected_supported": false}
+{"id": "rs-07", "category": "relation_swap", "claim": "Indrik Spider mitigates Cobalt Strike in enterprise defense.", "expected_supported": false}
+{"id": "rs-05", "category": "relation_swap", "claim": "Malteiro mitigates Mispadu in enterprise defense.", "expected_supported": false}
+{"id": "rs-01", "category": "relation_swap", "claim": "Ke3chang mitigates spwebmember in enterprise defense.", "expected_supported": false}
+{"id": "id-19", "category": "invented_date_or_cve", "claim": "BlackByte deployed BlackByte 2.0 Ransomware via CVE-2029-9999 in 2029.", "expected_supported": false}
+{"id": "df-18", "category": "direction_flip", "claim": "gsecdump uses APT1 in targeted campaigns.", "expected_supported": false}
+{"id": "df-16", "category": "direction_flip", "claim": "Ursnif uses TA551 in targeted campaigns.", "expected_supported": false}
+{"id": "df-09", "category": "direction_flip", "claim": "JSS Loader uses FIN7 in targeted campaigns.", "expected_supported": false}
+{"id": "gd-02", "category": "grounded_direct", "claim": "Mustang Panda deploys PUBLOAD in observed intrusions.", "expected_supported": true}
+{"id": "rs-06", "category": "relation_swap", "claim": "APT3 mitigates schtasks in enterprise defense.", "expected_supported": false}
+{"id": "nc-07", "category": "negation_contradiction", "claim": "Indrik Spider did not use Cobalt Strike in any campaign.", "expected_supported": false}
+{"id": "df-01", "category": "direction_flip", "claim": "spwebmember uses Ke3chang in targeted campaigns.", "expected_supported": false}
+{"id": "es-16", "category": "entity_swap", "claim": "TA551 deployed HDoor during operations.", "expected_supported": false}
+{"id": "nc-13", "category": "negation_contradiction", "claim": "Molerats did not use DropBook in any campaign.", "expected_supported": false}
+{"id": "es-04", "category": "entity_swap", "claim": "Akira deployed HDoor during operations.", "expected_supported": false}
+{"id": "gd-01", "category": "grounded_direct", "claim": "Ke3chang deploys spwebmember in observed intrusions.", "expected_supported": true}
+{"id": "gd-05", "category": "grounded_direct", "claim": "Malteiro deploys Mispadu in observed intrusions.", "expected_supported": true}
+{"id": "ie-07", "category": "invented_entity", "claim": "Indrik Spider utilized NebulaBeacon for persistence.", "expected_supported": false}
+{"id": "ie-20", "category": "invented_entity", "claim": "APT1 utilized ZenithAgent for persistence.", "expected_supported": false}
+{"id": "id-17", "category": "invented_date_or_cve", "claim": "Scarlet Mimic deployed FakeM via CVE-2042-9999 in 2042.", "expected_supported": false}
+{"id": "nc-11", "category": "negation_contradiction", "claim": "Ke3chang did not use Okrum in any campaign.", "expected_supported": false}
+{"id": "es-08", "category": "entity_swap", "claim": "Moses Staff deployed HDoor during operations.", "expected_supported": false}
+{"id": "id-09", "category": "invented_date_or_cve", "claim": "FIN7 deployed JSS Loader via CVE-2035-9999 in 2035.", "expected_supported": false}
+{"id": "gm-13", "category": "grounded_multi_hop", "claim": "Software Configuration mitigates Phishing for Information according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gm-16", "category": "grounded_multi_hop", "claim": "Execution Prevention mitigates Input Injection according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gd-13", "category": "grounded_direct", "claim": "Molerats deploys DropBook in observed intrusions.", "expected_supported": true}
+{"id": "df-07", "category": "direction_flip", "claim": "Cobalt Strike uses Indrik Spider in targeted campaigns.", "expected_supported": false}
+{"id": "es-13", "category": "entity_swap", "claim": "Molerats deployed HDoor during operations.", "expected_supported": false}
+{"id": "gd-03", "category": "grounded_direct", "claim": "Gamaredon Group deploys Pteranodon in observed intrusions.", "expected_supported": true}
+{"id": "ie-08", "category": "invented_entity", "claim": "Moses Staff utilized PrismKeylogger for persistence.", "expected_supported": false}
+{"id": "rs-19", "category": "relation_swap", "claim": "BlackByte mitigates BlackByte 2.0 Ransomware in enterprise defense.", "expected_supported": false}
+{"id": "gm-08", "category": "grounded_multi_hop", "claim": "Update Software mitigates Component Firmware according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gm-09", "category": "grounded_multi_hop", "claim": "Pre-compromise mitigates Vulnerability Scanning according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "es-02", "category": "entity_swap", "claim": "Mustang Panda deployed HDoor during operations.", "expected_supported": false}
+{"id": "nc-08", "category": "negation_contradiction", "claim": "Moses Staff did not use StrifeWater in any campaign.", "expected_supported": false}
+{"id": "ie-10", "category": "invented_entity", "claim": "APT5 utilized KryptonLoader for persistence.", "expected_supported": false}
+{"id": "es-12", "category": "entity_swap", "claim": "APT3 deployed HDoor during operations.", "expected_supported": false}
+{"id": "ie-04", "category": "invented_entity", "claim": "Akira utilized SolarisRAT for persistence.", "expected_supported": false}
+{"id": "id-11", "category": "invented_date_or_cve", "claim": "Ke3chang deployed Okrum via CVE-2042-9999 in 2042.", "expected_supported": false}
+{"id": "es-17", "category": "entity_swap", "claim": "Scarlet Mimic deployed HDoor during operations.", "expected_supported": false}
+{"id": "ie-18", "category": "invented_entity", "claim": "APT1 utilized TitanExploit for persistence.", "expected_supported": false}
+{"id": "gm-20", "category": "grounded_multi_hop", "claim": "Privileged Account Management mitigates Firmware Corruption according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gm-06", "category": "grounded_multi_hop", "claim": "Update Software mitigates Bypass User Account Control according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "df-03", "category": "direction_flip", "claim": "Pteranodon uses Gamaredon Group in targeted campaigns.", "expected_supported": false}
+{"id": "es-03", "category": "entity_swap", "claim": "Gamaredon Group deployed HDoor during operations.", "expected_supported": false}
+{"id": "id-20", "category": "invented_date_or_cve", "claim": "APT1 deployed PsExec via CVE-2031-9999 in 2031.", "expected_supported": false}
+{"id": "gm-10", "category": "grounded_multi_hop", "claim": "Execution Prevention mitigates Gatekeeper Bypass according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gm-04", "category": "grounded_multi_hop", "claim": "Network Intrusion Prevention mitigates Fallback Channels according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "gd-09", "category": "grounded_direct", "claim": "FIN7 deploys JSS Loader in observed intrusions.", "expected_supported": true}
+{"id": "es-15", "category": "entity_swap", "claim": "Transparent Tribe deployed HDoor during operations.", "expected_supported": false}
+{"id": "nc-09", "category": "negation_contradiction", "claim": "FIN7 did not use JSS Loader in any campaign.", "expected_supported": false}
+{"id": "rs-17", "category": "relation_swap", "claim": "Scarlet Mimic mitigates FakeM in enterprise defense.", "expected_supported": false}
+{"id": "id-01", "category": "invented_date_or_cve", "claim": "Ke3chang deployed spwebmember via CVE-2029-9999 in 2029.", "expected_supported": false}
+{"id": "nc-02", "category": "negation_contradiction", "claim": "Mustang Panda did not use PUBLOAD in any campaign.", "expected_supported": false}
+{"id": "gd-10", "category": "grounded_direct", "claim": "APT5 deploys PULSECHECK in observed intrusions.", "expected_supported": true}
+{"id": "df-15", "category": "direction_flip", "claim": "Crimson uses Transparent Tribe in targeted campaigns.", "expected_supported": false}
+{"id": "gm-02", "category": "grounded_multi_hop", "claim": "User Account Management mitigates Container API according to MITRE ATT&CK.", "expected_supported": true}
+{"id": "nc-06", "category": "negation_contradiction", "claim": "APT3 did not use schtasks in any campaign.", "expected_supported": false}
+{"id": "ie-12", "category": "invented_entity", "claim": "APT3 utilized OmegaDropper for persistence.", "expected_supported": false}
+{"id": "es-09", "category": "entity_swap", "claim": "FIN7 deployed HDoor during operations.", "expected_supported": false}
+{"id": "ie-15", "category": "invented_entity", "claim": "Transparent Tribe utilized MirageShell for persistence.", "expected_supported": false}
+{"id": "rs-03", "category": "relation_swap", "claim": "Gamaredon Group mitigates Pteranodon in enterprise defense.", "expected_supported": false}
+{"id": "id-08", "category": "invented_date_or_cve", "claim": "Moses Staff deployed StrifeWater via CVE-2031-9999 in 2031.", "expected_supported": false}
+{"id": "id-07", "category": "invented_date_or_cve", "claim": "Indrik Spider deployed Cobalt Strike via CVE-2029-9999 in 2029.", "expected_supported": false}
+{"id": "gd-16", "category": "grounded_direct", "claim": "TA551 deploys Ursnif in observed intrusions.", "expected_supported": true}
+{"id": "ie-14", "category": "invented_entity", "claim": "Elderwood utilized PulseInjector for persistence.", "expected_supported": false}
+{"id": "id-12", "category": "invented_date_or_cve", "claim": "APT3 deployed RemoteCMD via CVE-2099-9999 in 2099.", "expected_supported": false}
+{"id": "rs-15", "category": "relation_swap", "claim": "Transparent Tribe mitigates Crimson in enterprise defense.", "expected_supported": false}
+{"id": "id-05", "category": "invented_date_or_cve", "claim": "Malteiro deployed Mispadu via CVE-2042-9999 in 2042.", "expected_supported": false}
+{"id": "ie-16", "category": "invented_entity", "claim": "TA551 utilized ZeroTrojanX for persistence.", "expected_supported": false}
+{"id": "ie-05", "category": "invented_entity", "claim": "Malteiro utilized CobaltMirage for persistence.", "expected_supported": false}
+{"id": "es-18", "category": "entity_swap", "claim": "APT1 deployed HDoor during operations.", "expected_supported": false}
+{"id": "gd-08", "category": "grounded_direct", "claim": "Moses Staff deploys StrifeWater in observed intrusions.", "expected_supported": true}
+{"id": "nc-12", "category": "negation_contradiction", "claim": "APT3 did not use RemoteCMD in any campaign.", "expected_supported": false}
+{"id": "es-10", "category": "entity_swap", "claim": "APT5 deployed HDoor during operations.", "expected_supported": false}
+{"id": "rs-20", "category": "relation_swap", "claim": "APT1 mitigates PsExec in enterprise defense.", "expected_supported": false}
+{"id": "id-10", "category": "invented_date_or_cve", "claim": "APT5 deployed PULSECHECK via CVE-1989-9999 in 1989.", "expected_supported": false}
+{"id": "gd-17", "category": "grounded_direct", "claim": "Scarlet Mimic deploys FakeM in observed intrusions.", "expected_supported": true}
+{"id": "id-13", "category": "invented_date_or_cve", "claim": "Molerats deployed DropBook via CVE-2029-9999 in 2029.", "expected_supported": false}
+{"id": "gd-06", "category": "grounded_direct", "claim": "APT3 deploys schtasks in observed intrusions.", "expected_supported": true}
+{"id": "nc-10", "category": "negation_contradiction", "claim": "APT5 did not use PULSECHECK in any campaign.", "expected_supported": false}
+{"id": "id-15", "category": "invented_date_or_cve", "claim": "Transparent Tribe deployed Crimson via CVE-2035-9999 in 2035.", "expected_supported": false}
+{"id": "nc-04", "category": "negation_contradiction", "claim": "Akira did not use PsExec in any campaign.", "expected_supported": false}
+{"id": "id-02", "category": "invented_date_or_cve", "claim": "Mustang Panda deployed PUBLOAD via CVE-2031-9999 in 2031.", "expected_supported": false}
+{"id": "rs-08", "category": "relation_swap", "claim": "Moses Staff mitigates StrifeWater in enterprise defense.", "expected_supported": false}
+{"id": "rs-12", "category": "relation_swap", "claim": "APT3 mitigates RemoteCMD in enterprise defense.", "expected_supported": false}
+{"id": "ie-09", "category": "invented_entity", "claim": "FIN7 utilized AegisStealer for persistence.", "expected_supported": false}
+{"id": "ie-01", "category": "invented_entity", "claim": "Ke3chang utilized VoidCrypter for persistence.", "expected_supported": false}
+{"id": "ie-19", "category": "invented_entity", "claim": "BlackByte utilized BorealMiner for persistence.", "expected_supported": false}
+{"id": "df-19", "category": "direction_flip", "claim": "BlackByte 2.0 Ransomware uses BlackByte in targeted campaigns.", "expected_supported": false}
+{"id": "df-10", "category": "direction_flip", "claim": "PULSECHECK uses APT5 in targeted campaigns.", "expected_supported": false}
+{"id": "rs-11", "category": "relation_swap", "claim": "Ke3chang mitigates Okrum in enterprise defense.", "expected_supported": false}
+{"id": "rs-09", "category": "relation_swap", "claim": "FIN7 mitigates JSS Loader in enterprise defense.", "expected_supported": false}

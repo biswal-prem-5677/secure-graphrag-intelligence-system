@@ -1,0 +1,10 @@
+[
+  {
+    "id": "df-19",
+    "category": "direction_flip",
+    "claim": "BlackByte 2.0 Ransomware uses BlackByte in targeted campaigns.",
+    "expected_supported": false,
+    "predicted_supported": true,
+    "unsupported_reasons": []
+  }
+]
