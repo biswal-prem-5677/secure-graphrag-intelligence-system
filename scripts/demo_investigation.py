@@ -30,13 +30,19 @@ RESET = "\033[0m"
 
 
 def print_banner():
+    from app.retrieval.graph_retriever import graph_retriever
+    d = graph_retriever._get_offline_data()
+    n_cnt = len(d.get("nodes", []))
+    e_cnt = len(d.get("edges", []))
+    ev_cnt = len(d.get("evidence", []))
+    ver = d.get("metadata", {}).get("version", "20.1")
     print(f"""
 {CYAN}========================================================================{RESET}
 {BOLD}{GREEN}  SECURE GRAPHRAG KNOWLEDGE INTELLIGENCE SYSTEM{RESET}
 {BOLD}  Live Threat Intelligence Investigation & Multi-Hop Traversal Demo{RESET}
 {CYAN}========================================================================{RESET}
-  Knowledge Base : MITRE ATT&CK STIX 2.1 (125 nodes, 99 edges, 15 CTI evidence records)
-  Defense Engine : Entailment-based Claim Verifier & Multi-Hop Traversal Guardrails
+  Knowledge Base : Official MITRE ATT&CK Enterprise v{ver} ({n_cnt} nodes, {e_cnt} edges, {ev_cnt} citations)
+  Defense Engine : Directed Multi-Hop Traversal, Provenance Citations & Claim Verification
 """)
 
 
@@ -110,7 +116,7 @@ async def run_demo():
         },
         {
             "title": "CASE 3: Anti-Hallucination Guardrail Intercepting Ungrounded Adversarial Query",
-            "query": "Which alien botnet did CRIMSON WOLF deploy in 2029?",
+            "query": "Which alien botnet did APT29 deploy in 2029?",
             "hops": 2,
         },
     ]

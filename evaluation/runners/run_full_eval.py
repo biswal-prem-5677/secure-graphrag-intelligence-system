@@ -9,6 +9,9 @@ root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(root / "backend"))
 sys.path.insert(0, str(root))
 
+# Smoke evaluation datasets use canonical test fixtures alongside ATT&CK graph
+os.environ["INCLUDE_TEST_FIXTURE"] = "true"
+
 from evaluation.runners.run_task_eval import run_task_evaluation
 from evaluation.runners.run_retrieval_eval import run_retrieval_evaluation
 from evaluation.runners.run_generation_eval import run_generation_evaluation

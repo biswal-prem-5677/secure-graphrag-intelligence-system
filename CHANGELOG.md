@@ -2,6 +2,21 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.4.0] - 2026-11-25
+
+### Added (Audit Remediation — Phase 2: Official Data & Real Cypher Traversal)
+- **Official MITRE ATT&CK® Enterprise v20.1 STIX 2.1 Pipeline (`scripts/ingest_attack.py`)**:
+  - Replaced synthetic hand-written threat JSON with the pinned official Enterprise ATT&CK v20.1 STIX 2.1 bundle (`SHA-256: 539a843a7b53ed9749740b2123dddae3726b1a4831841c32aca740b011b910b5`), compiling **1,827 entities**, **20,957 directed STIX relationships**, and **22,299 provenance-linked evidence records** into `backend/app/graph/attack_enterprise_v20_1.json.gz`.
+  - Created `docs/DATA.md` recording data provenance, bundle SHA-256 checksum, entity/edge counts, and ATT&CK® terms of use.
+- **True Parameterized Cypher Multi-Hop Traversal & Indexed NetworkX Fallback**:
+  - Rewrote `GraphRetriever.retrieve_subgraph()` to execute typed, directed, depth-bounded variable-length Cypher path queries (`MATCH p = (seed)-[rels*1..{depth}]->(target)`) ordered by hop length and minimum confidence when Neo4j is live.
+  - Replaced repeated per-query disk JSON reading and $O(N \times E)$ edge loops with a cached `networkx.MultiDiGraph` index loaded once, enforcing directed traversal, `intended_rels` filtering, and hub-degree capping (`hub_degree_cap=15`).
+- **Full-Text Search & Fuzzy Entity Resolution**:
+  - Added `db.index.fulltext.queryNodes("entityFulltext", ...)` Cypher lookup alongside `difflib` fuzzy similarity matching, ATT&CK alias indexing (`Fancy Bear` -> `APT28`), and external ID matching (`G0007`, `S0154`, `T1055`, `M1049`) in `GraphRetriever` and `QueryAnalyzer`.
+  - Provenance-linked evidence retrieval now resolves citations directly via edge `source_id`s rather than blind substring scans.
+- **Verification Tests**:
+  - Added `backend/tests/unit/test_cypher_traversal.py` verifying parameterized Cypher variable-length path execution, directed BFS filtering, hub-degree capping, and fuzzy/alias entity resolution.
+
 ## [1.3.1] - 2026-11-25
 
 ### Changed (Audit Remediation — Phase 1)
