@@ -183,7 +183,7 @@ class QueryService:
 
         retrieval_res = await graph_retriever.retrieve_subgraph(
             entity_names=entities_to_query,
-            max_depth=request.max_hops,
+            max_depth=max(request.max_hops, analysis.max_hops),
             intended_rels=analysis.intended_relationships,
         )
         timings.graph_retrieval_ms = round((time.time() - t0) * 1000, 2)

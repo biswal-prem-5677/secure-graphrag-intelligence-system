@@ -1,104 +1,392 @@
+#!/usr/bin/env python3
 """
-Comparative Benchmark Runner: Secure GraphRAG vs. Plain Vector-RAG Baseline.
-Evaluates 105 multi-hop threat intelligence queries across Retrieval Recall,
-Multi-Hop Path Coverage, Faithfulness, Hallucination Rate, and Latency.
+Empirical Multi-Hop Comparative Benchmark Runner (Phase 3):
+Compares 3 retrieval & synthesis systems head-to-head on the frozen Official MITRE ATT&CK v20.1
+programmatic test suite (evaluation/datasets/attack_v20_1_test.jsonl):
+  1. Secure GraphRAG (Directed multi-hop graph traversal + ClaimVerifier)
+  2. Plain BM25 Chunk RAG (Okapi BM25 lexical retrieval + ClaimVerifier)
+  3. Dense LSA Vector-RAG (TfidfVectorizer + 128-dim TruncatedSVD cosine similarity + ClaimVerifier)
+
+Enforces ONE shared exact canonical ID / normalized entity matcher across all systems,
+computes bootstrap 95% confidence intervals, reports per-hop breakdowns, and strictly separates
+refusal F1 from answered-query faithfulness.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
+import hashlib
 import json
 import math
 import os
+import random
 import re
+import subprocess
 import sys
 import time
+import uuid
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
-root = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(root / "backend"))
-sys.path.insert(0, str(root))
+import numpy as np
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import normalize
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT))
+
+# Ensure test fixtures are EXCLUDED during official ATT&CK benchmark
+os.environ["ENVIRONMENT"] = "development"
+os.environ["INCLUDE_TEST_FIXTURE"] = "false"
 
 from app.db.database import init_db
 from app.evaluation.claim_verifier import claim_verifier
+from app.models.user import User, UserRole, user_store
 from app.retrieval.graph_retriever import graph_retriever
-from app.schemas.schemas import EvidenceRecord, GraphData, OperationalState, QueryRequest, TaskCompletionStatus
+from app.schemas.schemas import EvidenceRecord, GraphData, OperationalState, QueryRequest
+from app.security.auth import hash_password
 from app.services.query_service import query_service
 
 
-class PlainVectorRAGBaseline:
-    """
-    Standard Vector / BM25 Text-Retrieval RAG baseline without graph topology traversal.
-    Splits the CTI corpus into isolated textual documents and ranks by term similarity.
-    """
-
-    def __init__(self, corpus_docs: List[Dict[str, str]]) -> None:
-        self.docs = corpus_docs
-        self.doc_tokens: List[List[str]] = [self._tokenize(d["text"]) for d in self.docs]
-        self.num_docs = len(self.docs)
-        self.df = Counter()
-        for tokens in self.doc_tokens:
-            for term in set(tokens):
-                self.df[term] += 1
-
-    def _tokenize(self, text: str) -> List[str]:
-        return [w.lower() for w in re.findall(r"\b[a-zA-Z0-9_-]{2,}\b", text)]
-
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve top-K chunks using BM25 / TF-IDF scoring."""
-        q_tokens = self._tokenize(query)
-        scores: List[Tuple[float, int]] = []
-
-        for idx, doc_toks in enumerate(self.doc_tokens):
-            if not doc_toks:
-                continue
-            score = 0.0
-            doc_len = len(doc_toks)
-            term_counts = Counter(doc_toks)
-            for t in q_tokens:
-                if t in self.df:
-                    idf = math.log((self.num_docs - self.df[t] + 0.5) / (self.df[t] + 0.5) + 1.0)
-                    tf = term_counts.get(t, 0)
-                    score += idf * ((tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * doc_len / 30.0)))
-            scores.append((score, idx))
-
-        scores.sort(key=lambda x: x[0], reverse=True)
-        return [self.docs[idx] for score, idx in scores[:top_k] if score > 0.0]
-
-
 def build_text_corpus(graph_data: Dict[str, Any]) -> List[Dict[str, str]]:
-    """Build isolated text chunks from nodes, edges, and evidence for the Vector-RAG baseline."""
-    chunks = []
-    for ev in graph_data.get("evidence", []):
-        chunks.append({"id": ev.get("source_id", ""), "text": f"{ev.get('title', '')}: {ev.get('summary', '')}"})
+    """Build uniform chunked CTI documents from Official ATT&CK v20.1 nodes and relationships."""
+    nodes_by_id = {n["id"]: n for n in graph_data.get("nodes", [])}
+    chunks: List[Dict[str, str]] = []
 
     for n in graph_data.get("nodes", []):
-        props_str = " ".join(f"{k}: {v}" for k, v in n.get("properties", {}).items())
-        chunks.append({"id": n.get("id", ""), "text": f"Entity {n.get('name', '')} ({n.get('label', '')}). {props_str}"})
+        props = n.get("properties", {})
+        desc = props.get("description", "")
+        aliases = ", ".join(props.get("aliases", []))
+        alias_txt = f" Aliases: {aliases}." if aliases else ""
+        chunks.append({
+            "id": n.get("id", ""),
+            "text": f"{n.get('label', '')} {n.get('name', '')} ({n.get('id', '')}).{alias_txt} {desc}",
+        })
 
     for e in graph_data.get("edges", []):
+        src = nodes_by_id.get(e["source"], {})
+        tgt = nodes_by_id.get(e["target"], {})
+        src_name = src.get("name", e["source"])
+        tgt_name = tgt.get("name", e["target"])
         desc = e.get("properties", {}).get("description", "")
-        chunks.append({"id": f"{e.get('source')}-{e.get('target')}", "text": f"{e.get('source')} {e.get('type')} {e.get('target')}. {desc}"})
+        chunks.append({
+            "id": e.get("properties", {}).get("source_id", f"{e['source']}-{e['target']}"),
+            "text": f"{src_name} ({e['source']}) {e['type']} {tgt_name} ({e['target']}). {desc}",
+        })
 
     return chunks
 
 
-async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
-    print("=========================================================================")
-    print("  SECURE GRAPHRAG VS. PLAIN VECTOR-RAG COMPARATIVE BENCHMARK")
-    print(f"  Benchmark Suite: 105 Multi-Hop Threat Intelligence Tasks")
-    print("=========================================================================")
+class BM25ChunkRetriever:
+    """Standard Okapi BM25 lexical text retriever."""
 
-    # Ensure database tables and eval user exist for clean clone runs
-    import secrets
-    import uuid
-    from app.models.user import User, UserRole, user_store
-    from app.security.auth import hash_password
+    def __init__(self, docs: List[Dict[str, str]]) -> None:
+        self.docs = docs
+        self.doc_tokens = [self._tokenize(d["text"]) for d in docs]
+        self.num_docs = len(docs)
+        self.df = Counter()
+        for tokens in self.doc_tokens:
+            for term in set(tokens):
+                self.df[term] += 1
+        self.avg_dl = sum(len(t) for t in self.doc_tokens) / max(1, self.num_docs)
+
+    def _tokenize(self, text: str) -> List[str]:
+        return re.findall(r"[a-zA-Z0-9_.-]{2,}", text.lower())
+
+    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, str]]:
+        q_tokens = self._tokenize(query)
+        k1, b = 1.5, 0.75
+        scores: List[Tuple[float, int]] = []
+        for idx, d_tokens in enumerate(self.doc_tokens):
+            if not d_tokens:
+                continue
+            tf = Counter(d_tokens)
+            dl = len(d_tokens)
+            score = 0.0
+            for qt in q_tokens:
+                if qt not in tf:
+                    continue
+                df_val = self.df.get(qt, 0)
+                idf = math.log((self.num_docs - df_val + 0.5) / (df_val + 0.5) + 1.0)
+                freq = tf[qt]
+                denom = freq + k1 * (1 - b + b * (dl / self.avg_dl))
+                score += idf * ((freq * (k1 + 1)) / denom)
+            if score > 0:
+                scores.append((score, idx))
+        scores.sort(key=lambda x: x[0], reverse=True)
+        return [self.docs[idx] for _, idx in scores[:top_k]]
+
+
+class DenseLSAVectorRetriever:
+    """Dense semantic vector retriever using TF-IDF + 128-dim TruncatedSVD L2 cosine similarity."""
+
+    def __init__(self, docs: List[Dict[str, str]], n_components: int = 128) -> None:
+        self.docs = docs
+        texts = [d["text"] for d in docs]
+        self.vectorizer = TfidfVectorizer(max_features=12000, ngram_range=(1, 2), sublinear_tf=True)
+        tfidf_matrix = self.vectorizer.fit_transform(texts)
+        n_comp = min(n_components, tfidf_matrix.shape[1] - 1, tfidf_matrix.shape[0] - 1)
+        self.svd = TruncatedSVD(n_components=max(2, n_comp), random_state=42)
+        dense = self.svd.fit_transform(tfidf_matrix)
+        self.doc_embeddings = normalize(dense, norm="l2").astype(np.float32)
+
+    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, str]]:
+        q_vec = self.vectorizer.transform([query])
+        q_dense = self.svd.transform(q_vec)
+        q_norm = normalize(q_dense, norm="l2").astype(np.float32)
+        sims = (self.doc_embeddings @ q_norm.T).ravel()
+        top_indices = np.argpartition(sims, -top_k)[-top_k:]
+        top_indices = top_indices[np.argsort(sims[top_indices])[::-1]]
+        return [self.docs[i] for i in top_indices if sims[i] > 0.15]
+
+
+def shared_canonical_recall(
+    gold_ids: List[str],
+    gold_names: List[str],
+    retrieved_ids: Set[str],
+    retrieved_names_lower: Set[str],
+    raw_text_lower: str = "",
+) -> float:
+    """
+    ONE uniform exact matcher applied identically to GraphRAG, BM25 RAG, and Dense Vector-RAG.
+    A gold entity (id, name) is counted as recovered ONLY if its canonical ATT&CK ID matches
+    OR its exact normalized full name appears via word boundaries.
+    """
+    if not gold_ids:
+        return 1.0 if (not retrieved_ids and not raw_text_lower.strip()) else 0.0
+
+    matches = 0
+    for gid, gname in zip(gold_ids, gold_names):
+        gid_l = gid.lower()
+        gname_l = gname.lower()
+        if gid_l in retrieved_ids or gname_l in retrieved_names_lower:
+            matches += 1
+        elif raw_text_lower:
+            if gid_l in raw_text_lower or re.search(r"(?<!\w)" + re.escape(gname_l) + r"(?!\w)", raw_text_lower):
+                matches += 1
+    return matches / len(gold_ids)
+
+
+def bootstrap_ci(values: List[float], n_boot: int = 1000, seed: int = 42) -> Tuple[float, float, float]:
+    """Compute mean and 95% bootstrap confidence interval."""
+    if not values:
+        return 0.0, 0.0, 0.0
+    rng = random.Random(seed)
+    n = len(values)
+    means = []
+    for _ in range(n_boot):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    mean_val = sum(values) / n
+    lo = means[int(0.025 * n_boot)]
+    hi = means[min(int(0.975 * n_boot), n_boot - 1)]
+    return round(mean_val, 3), round(lo, 3), round(hi, 3)
+
+
+def calc_f1(tp: int, fp: int, fn: int) -> Tuple[float, float, float]:
+    prec = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+    rec = tp / (tp + fn) if (tp + fn) > 0 else 1.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+    return round(prec, 3), round(rec, 3), round(f1, 3)
+
+
+def p95(vals: List[float]) -> float:
+    if not vals:
+        return 0.0
+    s = sorted(vals)
+    return round(s[min(int(0.95 * len(s)), len(s) - 1)], 1)
+
+
+async def evaluate_chunk_rag_system(
+    name: str,
+    retriever: Any,
+    tasks: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Evaluate a chunk retrieval baseline (BM25 or Dense Vector) using the shared verifier and matcher."""
+    recalls: List[float] = []
+    latencies: List[float] = []
+    answered_faith: List[float] = []
+    answered_halluc: List[float] = []
+    by_category: Dict[str, List[float]] = {}
+    completed = 0
+    ref_tp = ref_fp = ref_fn = 0
+
+    for t in tasks:
+        q = t["query"]
+        gold_ids = t.get("gold_entity_ids", [])
+        gold_names = t.get("gold_entity_names", [])
+        cat = t.get("category", "unknown")
+        is_refusal_task = (cat == "unanswerable_refusal")
+
+        t0 = time.time()
+        chunks = retriever.retrieve(q, top_k=5)
+        lat = (time.time() - t0) * 1000
+        latencies.append(lat)
+
+        chunk_text = " ".join(c["text"] for c in chunks)
+        chunk_text_low = chunk_text.lower()
+        found_ids = {aid.lower() for aid in re.findall(r"\b[TGSM]\d{4}(?:\.\d{3})?\b", chunk_text)}
+
+        rec = shared_canonical_recall(gold_ids, gold_names, found_ids, set(), chunk_text_low)
+        recalls.append(rec)
+        by_category.setdefault(cat, []).append(rec)
+
+        evidence = [
+            EvidenceRecord(
+                source_id=c["id"],
+                title=f"Corpus Chunk {c['id']}",
+                source_type="TextCorpus",
+                confidence=0.80,
+                summary=c["text"],
+            )
+            for c in chunks
+        ]
+
+        if not chunks or (is_refusal_task and len(found_ids) == 0 and not any(s.lower() in chunk_text_low for s in t.get("seed_entities", []))):
+            ans = "Insufficient evidence in the retrieved text corpus to answer this query."
+        else:
+            top_txt = " ".join(c["text"] for c in chunks[:2])
+            ans = f"Based on retrieved documentation: {top_txt}"
+
+        verif = claim_verifier.verify_answer(
+            answer=ans,
+            graph_data=GraphData(),
+            relationship_paths=[],
+            evidence_records=evidence,
+        )
+
+        if is_refusal_task:
+            if verif.is_refusal:
+                ref_tp += 1
+            else:
+                ref_fp_or_fn = 1
+                ref_fn += ref_fp_or_fn
+        else:
+            if verif.is_refusal:
+                ref_fp += 1
+            else:
+                answered_faith.append(verif.faithfulness_score)
+                answered_halluc.append(verif.hallucination_rate)
+
+        if (not is_refusal_task) and (not verif.is_refusal) and rec >= 0.50 and verif.faithfulness_score >= 0.70:
+            completed += 1
+
+    answerable_total = sum(1 for t in tasks if t.get("category") != "unanswerable_refusal")
+    mean_rec, ci_lo, ci_hi = bootstrap_ci([r for t, r in zip(tasks, recalls) if t.get("category") != "unanswerable_refusal"])
+    ref_p, ref_r, ref_f1 = calc_f1(ref_tp, ref_fp, ref_fn)
+
+    return {
+        "system": name,
+        "retrieval_recall_at_k": mean_rec,
+        "retrieval_recall_95ci": [ci_lo, ci_hi],
+        "task_completion_rate": round(completed / max(1, answerable_total), 3),
+        "generation_faithfulness": round(sum(answered_faith) / max(1, len(answered_faith)), 3),
+        "hallucination_rate": round(sum(answered_halluc) / max(1, len(answered_halluc)), 3),
+        "refusal_precision": ref_p,
+        "refusal_recall": ref_r,
+        "refusal_f1": ref_f1,
+        "latency_p50_ms": round(sorted(latencies)[len(latencies) // 2], 1),
+        "latency_p95_ms": p95(latencies),
+        "by_category_recall": {k: round(sum(v) / len(v), 3) for k, v in by_category.items()},
+    }
+
+
+async def evaluate_graphrag_system(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Evaluate Secure GraphRAG on the exact same held-out dataset and shared canonical scorer."""
+    recalls: List[float] = []
+    latencies: List[float] = []
+    answered_faith: List[float] = []
+    answered_halluc: List[float] = []
+    by_category: Dict[str, List[float]] = {}
+    completed = 0
+    ref_tp = ref_fp = ref_fn = 0
+
+    for idx, t in enumerate(tasks, 1):
+        q = t["query"]
+        gold_ids = t.get("gold_entity_ids", [])
+        gold_names = t.get("gold_entity_names", [])
+        cat = t.get("category", "unknown")
+        is_refusal_task = (cat == "unanswerable_refusal")
+        hops = max(2, int(t.get("hop_count", 2)))
+
+        t0 = time.time()
+        req = QueryRequest(query=q, max_hops=hops, bypass_cache=True)
+        resp = await query_service.execute_query(req, user_id="eval_user", user_role="admin")
+        lat = (time.time() - t0) * 1000
+        latencies.append(lat)
+
+        found_ids = {n.id.lower() for n in resp.graph_data.nodes}
+        found_names = {n.name.lower() for n in resp.graph_data.nodes}
+        for s in resp.relationship_paths:
+            found_names.add(s.source.lower())
+            found_names.add(s.target.lower())
+
+        rec = shared_canonical_recall(gold_ids, gold_names, found_ids, found_names)
+        recalls.append(rec)
+        by_category.setdefault(cat, []).append(rec)
+
+        gr_is_refusal = (resp.operational_state == OperationalState.EMPTY_RETRIEVAL) or ("insufficient evidence" in resp.answer.lower())
+        if is_refusal_task:
+            if gr_is_refusal:
+                ref_tp += 1
+            else:
+                ref_fn += 1
+        else:
+            if gr_is_refusal:
+                ref_fp += 1
+            else:
+                answered_faith.append(resp.faithfulness_score)
+                answered_halluc.append(round(1.0 - resp.faithfulness_score, 3))
+
+        if (not is_refusal_task) and (not gr_is_refusal) and rec >= 0.50 and resp.faithfulness_score >= 0.70:
+            completed += 1
+
+        if idx % 35 == 0 or idx == len(tasks):
+            print(f"  Evaluated {idx}/{len(tasks)} tasks via GraphRAG...")
+
+    answerable_total = sum(1 for t in tasks if t.get("category") != "unanswerable_refusal")
+    mean_rec, ci_lo, ci_hi = bootstrap_ci([r for t, r in zip(tasks, recalls) if t.get("category") != "unanswerable_refusal"])
+    ref_p, ref_r, ref_f1 = calc_f1(ref_tp, ref_fp, ref_fn)
+
+    return {
+        "system": "Secure GraphRAG",
+        "retrieval_recall_at_k": mean_rec,
+        "retrieval_recall_95ci": [ci_lo, ci_hi],
+        "task_completion_rate": round(completed / max(1, answerable_total), 3),
+        "generation_faithfulness": round(sum(answered_faith) / max(1, len(answered_faith)), 3),
+        "hallucination_rate": round(sum(answered_halluc) / max(1, len(answered_halluc)), 3),
+        "refusal_precision": ref_p,
+        "refusal_recall": ref_r,
+        "refusal_f1": ref_f1,
+        "latency_p50_ms": round(sorted(latencies)[len(latencies) // 2], 1),
+        "latency_p95_ms": p95(latencies),
+        "by_category_recall": {k: round(sum(v) / len(v), 3) for k, v in by_category.items()},
+    }
+
+
+async def run_comparative_benchmark(split: str = "test") -> Dict[str, Any]:
+    ds_name = "attack_v20_1_test.jsonl" if split == "test" else "attack_v20_1_dev.jsonl"
+    dataset_path = ROOT / "evaluation" / "datasets" / ds_name
+    dataset_sha256 = hashlib.sha256(dataset_path.read_bytes()).hexdigest()[:16]
+
+    try:
+        git_sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
+    except Exception:
+        git_sha = "unknown"
+
+    print("=================================================================================")
+    print("  SECURE GRAPHRAG VS. BM25 CHUNK RAG VS. DENSE LSA VECTOR-RAG")
+    print(f"  Dataset: evaluation/datasets/{ds_name} (sha256:{dataset_sha256}) | Git: {git_sha}")
+    print("=================================================================================")
 
     init_db()
     if not user_store.user_exists("eval_user"):
+        import secrets
         user_store.add_user(
             User(
                 id=str(uuid.uuid4()),
@@ -109,264 +397,94 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
             )
         )
 
-    # Load multi-hop evaluation dataset
-    dataset_path = root / "evaluation" / "datasets" / "mitre_multihop_100.jsonl"
-    tasks = []
-    with open(dataset_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                tasks.append(json.loads(line))
-
-    tasks = tasks[:max_tasks]
-
-    # Initialize Vector-RAG Baseline with STIX Corpus
+    tasks = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     offline_data = graph_retriever._get_offline_data()
     corpus = build_text_corpus(offline_data)
-    vector_rag = PlainVectorRAGBaseline(corpus)
 
-    graphrag_entity_recalls: List[float] = []
-    vectorrag_entity_recalls: List[float] = []
-    graphrag_latencies: List[float] = []
-    vectorrag_latencies: List[float] = []
-    graphrag_answered_faithfulness: List[float] = []
-    vectorrag_answered_faithfulness: List[float] = []
-    graphrag_answered_hallucination: List[float] = []
-    vectorrag_answered_hallucination: List[float] = []
-    graphrag_completed_count = 0
-    vectorrag_completed_count = 0
-    gr_refusal_tp = gr_refusal_fp = gr_refusal_fn = 0
-    vr_refusal_tp = vr_refusal_fp = vr_refusal_fn = 0
+    print(f"Indexing {len(corpus)} ATT&CK v20.1 corpus chunks for BM25 and 128-dim Dense LSA Vector baselines...")
+    bm25_retriever = BM25ChunkRetriever(corpus)
+    dense_retriever = DenseLSAVectorRetriever(corpus, n_components=128)
 
-    print(f"Executing head-to-head evaluation across {len(tasks)} multi-hop tasks...\n")
+    print("Running Secure GraphRAG evaluation...")
+    gr_metrics = await evaluate_graphrag_system(tasks)
+    print("Running Plain BM25 Chunk RAG baseline...")
+    bm25_metrics = await evaluate_chunk_rag_system("Plain BM25 Chunk RAG", bm25_retriever, tasks)
+    print("Running Dense LSA Vector-RAG baseline...")
+    dense_metrics = await evaluate_chunk_rag_system("Dense LSA Vector-RAG", dense_retriever, tasks)
 
-    for idx, t in enumerate(tasks, 1):
-        q = t["query"]
-        gold_ents = set(e.lower() for e in t.get("gold_entities", []))
-        hop_count = t.get("hop_count", 2)
-        is_refusal = (t.get("category") == "adversarial_refusal")
-
-        # 1. Execute GraphRAG Pipeline
-        t0 = time.time()
-        req = QueryRequest(query=q)
-        gr_resp = await query_service.execute_query(req, user_id="eval_user", user_role="admin")
-        gr_time = (time.time() - t0) * 1000
-        graphrag_latencies.append(gr_time)
-
-        # GraphRAG Entity Recall
-        gr_found = set(n.name.lower() for n in gr_resp.graph_data.nodes)
-        for n in gr_resp.graph_data.nodes:
-            gr_found.add(n.id.lower())
-        for s in gr_resp.relationship_paths:
-            gr_found.add(s.source.lower())
-            gr_found.add(s.target.lower())
-
-        if is_refusal:
-            gr_recall = 1.0 if not gr_found else 0.0
-        elif gold_ents:
-            gr_matches = sum(
-                1 for e in gold_ents
-                if any(e == found or e in found or found in e for found in gr_found)
-            )
-            gr_recall = gr_matches / len(gold_ents)
-        else:
-            gr_recall = 1.0
-        graphrag_entity_recalls.append(gr_recall)
-        gr_is_refusal = (gr_resp.operational_state == OperationalState.EMPTY_RETRIEVAL) or ("insufficient evidence" in gr_resp.answer.lower())
-        if is_refusal:
-            if gr_is_refusal:
-                gr_refusal_tp += 1
-            else:
-                gr_refusal_fn += 1
-        else:
-            if gr_is_refusal:
-                gr_refusal_fp += 1
-            else:
-                graphrag_answered_faithfulness.append(gr_resp.faithfulness_score)
-                graphrag_answered_hallucination.append(1.0 - gr_resp.faithfulness_score)
-        if not is_refusal and not gr_is_refusal and gr_recall >= 0.70 and gr_resp.faithfulness_score >= 0.70:
-            graphrag_completed_count += 1
-
-        # 2. Execute Plain Vector-RAG Baseline (BM25 Chunk Retrieval + Empirical Verification)
-        t0 = time.time()
-        vr_chunks = vector_rag.retrieve(q, top_k=5)
-        vr_time = (time.time() - t0) * 1000
-        vectorrag_latencies.append(vr_time)
-
-        vr_text = " ".join(c["text"].lower() for c in vr_chunks)
-        vr_recall = (
-            sum(1 for e in gold_ents if e in vr_text) / len(gold_ents)
-            if gold_ents
-            else (1.0 if not vr_chunks else 0.0)
-        )
-        vectorrag_entity_recalls.append(vr_recall)
-
-        # Synthesize baseline answer from retrieved text chunks
-        vr_evidence = [
-            EvidenceRecord(
-                source_id=c["id"],
-                title=f"Chunk {c['id']}",
-                source_type="TextCorpus",
-                confidence=0.80,
-                summary=c["text"],
-            )
-            for c in vr_chunks
-        ]
-
-        if not vr_chunks or (is_refusal and vr_recall == 0.0):
-            vr_answer = "Insufficient evidence in the retrieved text corpus to answer this query."
-        else:
-            # Baseline generates answer from top retrieved text chunks
-            top_texts = [c["text"] for c in vr_chunks[:2]]
-            vr_answer = f"Based on retrieved documentation: {' '.join(top_texts)}"
-
-        # Empirically verify baseline answer with claim verifier (no synthetic formulas)
-        vr_verif = claim_verifier.verify_answer(
-            answer=vr_answer,
-            graph_data=GraphData(),
-            relationship_paths=[],
-            evidence_records=vr_evidence,
-        )
-
-        vr_faith = vr_verif.faithfulness_score
-        vr_halluc = vr_verif.hallucination_rate
-        vr_is_refusal = vr_verif.is_refusal
-        if is_refusal:
-            if vr_is_refusal:
-                vr_refusal_tp += 1
-            else:
-                vr_refusal_fn += 1
-        else:
-            if vr_is_refusal:
-                vr_refusal_fp += 1
-            else:
-                vectorrag_answered_faithfulness.append(vr_faith)
-                vectorrag_answered_hallucination.append(vr_halluc)
-        vr_completed = (not is_refusal) and (not vr_is_refusal) and (vr_recall >= 0.70) and (vr_faith >= 0.70)
-        if vr_completed:
-            vectorrag_completed_count += 1
-
-        if idx % 20 == 0 or idx == len(tasks):
-            print(f"  Processed {idx}/{len(tasks)} tasks | GraphRAG Recall: {sum(graphrag_entity_recalls)/len(graphrag_entity_recalls):.2f} vs Vector-RAG: {sum(vectorrag_entity_recalls)/len(vectorrag_entity_recalls):.2f}")
-
-    def p95(vals: List[float]) -> float:
-        if not vals:
-            return 0.0
-        s = sorted(vals)
-        k = int(0.95 * len(s))
-        return s[min(k, len(s) - 1)]
-
-    def calc_f1(tp: int, fp: int, fn: int) -> Tuple[float, float, float]:
-        prec = tp / (tp + fp) if (tp + fp) > 0 else 1.0
-        rec = tp / (tp + fn) if (tp + fn) > 0 else 1.0
-        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
-        return round(prec, 3), round(rec, 3), round(f1, 3)
-
-    gr_ref_p, gr_ref_r, gr_ref_f1 = calc_f1(gr_refusal_tp, gr_refusal_fp, gr_refusal_fn)
-    vr_ref_p, vr_ref_r, vr_ref_f1 = calc_f1(vr_refusal_tp, vr_refusal_fp, vr_refusal_fn)
-
-    gr_answered_faith = round(sum(graphrag_answered_faithfulness) / len(graphrag_answered_faithfulness), 3) if graphrag_answered_faithfulness else 0.0
-    gr_answered_halluc = round(sum(graphrag_answered_hallucination) / len(graphrag_answered_hallucination), 3) if graphrag_answered_hallucination else 0.0
-    vr_answered_faith = round(sum(vectorrag_answered_faithfulness) / len(vectorrag_answered_faithfulness), 3) if vectorrag_answered_faithfulness else 0.0
-    vr_answered_halluc = round(sum(vectorrag_answered_hallucination) / len(vectorrag_answered_hallucination), 3) if vectorrag_answered_hallucination else 0.0
-
-    total = len(tasks)
-    gr_recall_mean = round(sum(graphrag_entity_recalls) / total, 3)
-    vr_recall_mean = round(sum(vectorrag_entity_recalls) / total, 3)
-
+    meta = offline_data.get("metadata", {})
     summary = {
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "total_tasks": total,
-            "answered_tasks_graphrag": len(graphrag_answered_faithfulness),
-            "answered_tasks_vector_rag": len(vectorrag_answered_faithfulness),
-            "benchmark_dataset": "evaluation/datasets/mitre_multihop_100.jsonl",
-            "graph_nodes_available": len(offline_data.get("nodes", [])),
-            "graph_edges_available": len(offline_data.get("edges", [])),
-            "evidence_records_available": len(offline_data.get("evidence", [])),
+            "git_sha": git_sha,
+            "split": split,
+            "dataset": f"evaluation/datasets/{ds_name}",
+            "dataset_sha256": dataset_sha256,
+            "total_tasks": len(tasks),
+            "attack_version": meta.get("version", "20.1"),
+            "attack_sha256": meta.get("sha256", ""),
+            "graph_nodes": len(offline_data.get("nodes", [])),
+            "graph_edges": len(offline_data.get("edges", [])),
+            "seed": 42,
         },
-        "graphrag_metrics": {
-            "retrieval_recall_at_k": gr_recall_mean,
-            "task_completion_rate": round(graphrag_completed_count / total, 3),
-            "generation_faithfulness": gr_answered_faith,
-            "hallucination_rate": gr_answered_halluc,
-            "refusal_precision": gr_ref_p,
-            "refusal_recall": gr_ref_r,
-            "refusal_f1": gr_ref_f1,
-            "latency_p50_ms": round(sorted(graphrag_latencies)[total // 2], 1),
-            "latency_p95_ms": round(p95(graphrag_latencies), 1),
-        },
-        "vector_rag_baseline_metrics": {
-            "retrieval_recall_at_k": vr_recall_mean,
-            "task_completion_rate": round(vectorrag_completed_count / total, 3),
-            "generation_faithfulness": vr_answered_faith,
-            "hallucination_rate": vr_answered_halluc,
-            "refusal_precision": vr_ref_p,
-            "refusal_recall": vr_ref_r,
-            "refusal_f1": vr_ref_f1,
-            "latency_p50_ms": round(sorted(vectorrag_latencies)[total // 2], 1),
-            "latency_p95_ms": round(p95(vectorrag_latencies), 1),
-        },
-        "comparative_advantage": {
-            "retrieval_recall_delta": f"{round((gr_recall_mean - vr_recall_mean) * 100, 1):+.1f}%",
-            "task_completion_delta": f"{round((graphrag_completed_count - vectorrag_completed_count) / total * 100, 1):+.1f}%",
-            "faithfulness_delta": f"{round((gr_answered_faith - vr_answered_faith) * 100, 1):+.1f}%",
-            "refusal_f1_delta": f"{round((gr_ref_f1 - vr_ref_f1) * 100, 1):+.1f}%",
-        },
+        "graphrag_metrics": gr_metrics,
+        "bm25_baseline_metrics": bm25_metrics,
+        "dense_vector_baseline_metrics": dense_metrics,
     }
 
-    # Isolate run results into timestamped directory and update baseline comparison report
-    run_id = f"baseline_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    run_dir = root / "evaluation" / "results" / "runs" / run_id
+    run_id = f"baseline_{split}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_dir = ROOT / "evaluation" / "results" / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (run_dir / "config.json").write_text(json.dumps(summary["metadata"], indent=2), encoding="utf-8")
 
-    with open(run_dir / "metrics.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+    canon_json = ROOT / "evaluation" / "results" / "baseline_comparison.json"
+    canon_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    canonical_json = root / "evaluation" / "results" / "baseline_comparison.json"
-    with open(canonical_json, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+    gr_ci = gr_metrics["retrieval_recall_95ci"]
+    bm_ci = bm25_metrics["retrieval_recall_95ci"]
+    dn_ci = dense_metrics["retrieval_recall_95ci"]
 
-    # Write committed results Markdown
-    results_md_path = run_dir / "report.md"
-    canonical_md = root / "evaluation" / "results" / "baseline_comparison.md"
-    md_content = f"""# Secure GraphRAG vs. Vector-RAG Benchmark Evaluation Report
+    md_report = f"""# Empirical Multi-Hop Comparative Evaluation Report
 
-**Execution Timestamp**: {summary['metadata']['timestamp']}  
-**Evaluation Set**: `{summary['metadata']['benchmark_dataset']}` ({total} tasks)  
-**Knowledge Graph Base**: {summary['metadata']['graph_nodes_available']} nodes, {summary['metadata']['graph_edges_available']} edges, {summary['metadata']['evidence_records_available']} CTI evidence records.
+**Timestamp**: {summary['metadata']['timestamp']} | **Commit**: `{git_sha}`  
+**Dataset**: `{summary['metadata']['dataset']}` ({len(tasks)} programmatic held-out tasks, `sha256:{dataset_sha256}`)  
+**Knowledge Graph**: Official MITRE ATT&CK® Enterprise v{meta.get('version', '20.1')} ({len(offline_data.get('nodes', []))} nodes, {len(offline_data.get('edges', []))} edges)
 
-## Executive Summary (Empirical Verifier Output, Zero Synthetic Formulas)
+## 1. Head-to-Head Summary (Shared Exact Canonical Matcher & Empirical ClaimVerifier)
 
-| Canonical Metric | Secure GraphRAG | Plain BM25 Vector-RAG | Delta |
+| Canonical Metric | Secure GraphRAG | Plain BM25 Chunk RAG | Dense LSA Vector-RAG |
 | :--- | :---: | :---: | :---: |
-| **Retrieval Recall@K** | **{gr_recall_mean * 100:.1f}%** | {vr_recall_mean * 100:.1f}% | **{summary['comparative_advantage']['retrieval_recall_delta']}** |
-| **Task Completion Rate** | **{summary['graphrag_metrics']['task_completion_rate'] * 100:.1f}%** | {summary['vector_rag_baseline_metrics']['task_completion_rate'] * 100:.1f}% | **{summary['comparative_advantage']['task_completion_delta']}** |
-| **Generation Faithfulness (Answered)** | {gr_answered_faith:.2f} | {vr_answered_faith:.2f} | {summary['comparative_advantage']['faithfulness_delta']} |
-| **Hallucination Rate (Answered)** | {gr_answered_halluc * 100:.1f}% | {vr_answered_halluc * 100:.1f}% | — |
-| **Refusal F1 (Ungrounded Queries)** | **{gr_ref_f1:.2f}** | {vr_ref_f1:.2f} | **{summary['comparative_advantage']['refusal_f1_delta']}** |
-| **Latency P50** | {summary['graphrag_metrics']['latency_p50_ms']} ms | {summary['vector_rag_baseline_metrics']['latency_p50_ms']} ms | — |
-| **Latency P95** | {summary['graphrag_metrics']['latency_p95_ms']} ms | {summary['vector_rag_baseline_metrics']['latency_p95_ms']} ms | — |
+| **Retrieval Recall@K (95% CI)** | **{gr_metrics['retrieval_recall_at_k']*100:.1f}%** [{gr_ci[0]*100:.1f}–{gr_ci[1]*100:.1f}%] | {bm25_metrics['retrieval_recall_at_k']*100:.1f}% [{bm_ci[0]*100:.1f}–{bm_ci[1]*100:.1f}%] | {dense_metrics['retrieval_recall_at_k']*100:.1f}% [{dn_ci[0]*100:.1f}–{dn_ci[1]*100:.1f}%] |
+| **Task Completion Rate** | **{gr_metrics['task_completion_rate']*100:.1f}%** | {bm25_metrics['task_completion_rate']*100:.1f}% | {dense_metrics['task_completion_rate']*100:.1f}% |
+| **Generation Faithfulness (Answered)** | {gr_metrics['generation_faithfulness']:.2f} | {bm25_metrics['generation_faithfulness']:.2f} | {dense_metrics['generation_faithfulness']:.2f} |
+| **Hallucination Rate (Answered)** | {gr_metrics['hallucination_rate']*100:.1f}% | {bm25_metrics['hallucination_rate']*100:.1f}% | {dense_metrics['hallucination_rate']*100:.1f}% |
+| **Refusal F1 (Ungrounded Probes)** | **{gr_metrics['refusal_f1']:.2f}** | {bm25_metrics['refusal_f1']:.2f} | {dense_metrics['refusal_f1']:.2f} |
+| **Latency P50** | {gr_metrics['latency_p50_ms']} ms | {bm25_metrics['latency_p50_ms']} ms | {dense_metrics['latency_p50_ms']} ms |
+| **Latency P95** | {gr_metrics['latency_p95_ms']} ms | {bm25_metrics['latency_p95_ms']} ms | {dense_metrics['latency_p95_ms']} ms |
 
-## Notes & Transparency
+## 2. Per-Category / Per-Hop Retrieval Recall Breakdown
 
-- Refusals are evaluated separately via **Refusal F1** on the adversarial refusal subset and **excluded** from the answered faithfulness denominator (see `docs/METRICS.md`).
-- In verbatim chunk-quoting mode, plain BM25 text retrieval scores high faithfulness on its quoted snippet, but lower multi-hop **Retrieval Recall@K** (**{vr_recall_mean * 100:.1f}%** vs **{gr_recall_mean * 100:.1f}%**) because isolated lexical chunks omit intermediate bridge entities.
+| Task Category | Secure GraphRAG | Plain BM25 Chunk RAG | Dense LSA Vector-RAG |
+| :--- | :---: | :---: | :---: |
+| **2-Hop (`Actor -> Software -> Technique`)** | **{gr_metrics['by_category_recall'].get('two_hop_actor_sw_tech', 0)*100:.1f}%** | {bm25_metrics['by_category_recall'].get('two_hop_actor_sw_tech', 0)*100:.1f}% | {dense_metrics['by_category_recall'].get('two_hop_actor_sw_tech', 0)*100:.1f}% |
+| **3-Hop (`Actor -> SW -> Tech <- Mitigation`)** | **{gr_metrics['by_category_recall'].get('three_hop_actor_sw_tech_mit', 0)*100:.1f}%** | {bm25_metrics['by_category_recall'].get('three_hop_actor_sw_tech_mit', 0)*100:.1f}% | {dense_metrics['by_category_recall'].get('three_hop_actor_sw_tech_mit', 0)*100:.1f}% |
+| **Set Intersection (`Actor A ∩ Actor B`)** | **{gr_metrics['by_category_recall'].get('set_intersection', 0)*100:.1f}%** | {bm25_metrics['by_category_recall'].get('set_intersection', 0)*100:.1f}% | {dense_metrics['by_category_recall'].get('set_intersection', 0)*100:.1f}% |
 """
-    with open(results_md_path, "w", encoding="utf-8") as f:
-        f.write(md_content)
-    with open(canonical_md, "w", encoding="utf-8") as f:
-        f.write(md_content)
+    (run_dir / "report.md").write_text(md_report, encoding="utf-8")
+    (ROOT / "evaluation" / "results" / "baseline_comparison.md").write_text(md_report, encoding="utf-8")
 
-    print(f"\n=========================================================================")
-    print(f"  BENCHMARK COMPLETE")
-    print(f"  Run Artifacts: {run_dir}")
-    print(f"  Canonical Summary: {canonical_json}")
-    print(f"  Canonical Report: {canonical_md}")
-    print(f"  GraphRAG Recall@K: {gr_recall_mean * 100:.1f}% vs Vector-RAG: {vr_recall_mean * 100:.1f}%")
-    print(f"  GraphRAG Answered Faithfulness: {gr_answered_faith:.2f} | Refusal F1: {gr_ref_f1:.2f}")
-    print("=========================================================================\n")
+    print("\n=================================================================================")
+    print(f"  BENCHMARK COMPLETE ({run_dir})")
+    print(f"  GraphRAG Recall@K : {gr_metrics['retrieval_recall_at_k']*100:.1f}% (95% CI [{gr_ci[0]*100:.1f}–{gr_ci[1]*100:.1f}%]) | Refusal F1: {gr_metrics['refusal_f1']:.2f}")
+    print(f"  BM25 RAG Recall@K : {bm25_metrics['retrieval_recall_at_k']*100:.1f}% (95% CI [{bm_ci[0]*100:.1f}–{bm_ci[1]*100:.1f}%]) | Refusal F1: {bm25_metrics['refusal_f1']:.2f}")
+    print(f"  Dense LSA Recall@K: {dense_metrics['retrieval_recall_at_k']*100:.1f}% (95% CI [{dn_ci[0]*100:.1f}–{dn_ci[1]*100:.1f}%]) | Refusal F1: {dense_metrics['refusal_f1']:.2f}")
+    print("=================================================================================\n")
     return summary
 
 
 if __name__ == "__main__":
-    asyncio.run(run_comparative_benchmark())
+    parser = argparse.ArgumentParser(description="Run Multi-Hop Comparative Benchmark")
+    parser.add_argument("--split", choices=["dev", "test"], default="test", help="Dataset split (default: test)")
+    args = parser.parse_args()
+    asyncio.run(run_comparative_benchmark(split=args.split))

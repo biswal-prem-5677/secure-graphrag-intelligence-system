@@ -2,6 +2,30 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.5.0] - 2026-11-25
+
+### Added (Audit Remediation — Phase 3: Non-Circular Programmatic Evaluation & 3-System Baseline)
+- **Programmatic Multi-Hop Benchmark Generator (`scripts/build_attack_benchmark.py`)**:
+  - Generated **220 non-circular multi-hop tasks** directly from the Official MITRE ATT&CK® Enterprise v20.1 NetworkX graph without leaking answer entities in questions:
+    - 70 × 2-hop tasks (`ThreatActor -> Software -> Technique`)
+    - 70 × 3-hop tasks (`ThreatActor -> Software -> Technique <- MITIGATES <- Mitigation`)
+    - 40 × Set-Intersection tasks (`Actor A ∩ Actor B` shared techniques)
+    - 40 × Unanswerable out-of-distribution refusal tasks
+  - Split deterministically (`seed=42`) into `evaluation/datasets/attack_v20_1_dev.jsonl` (80 tasks) and `evaluation/datasets/attack_v20_1_test.jsonl` (140 frozen held-out tasks).
+- **3-System Head-to-Head Empirical Benchmark (`evaluation/runners/run_vector_baseline.py`)**:
+  - Evaluates **Secure GraphRAG**, **Plain BM25 Chunk RAG**, and **Dense LSA Vector-RAG** (128-dim TruncatedSVD L2 cosine over TF-IDF) using **one shared exact canonical matcher** and the same `ClaimVerifier`.
+  - Computes bootstrap 95% confidence intervals (`n=1000`, `seed=42`) and per-hop breakdowns:
+    - Overall Retrieval Recall@K: **68.7%** `[62.7–74.6%]` (GraphRAG) vs **8.5%** (BM25) vs **2.3%** (Dense LSA)
+    - 3-Hop Recall: **60.8%** (GraphRAG) vs **0.0%** (BM25) vs **0.0%** (Dense LSA)
+    - Refusal F1: **0.93** (GraphRAG) vs **0.00** (BM25 / Dense LSA)
+- **Automated README Sync (`scripts/sync_readme_metrics.py`)**:
+  - Generates the `README.md` comparative benchmark table directly from `evaluation/results/baseline_comparison.json`.
+
+### Changed
+- Fixed `QueryService` to pass `max(request.max_hops, analysis.max_hops)` to `GraphRetriever.retrieve_subgraph()`.
+- Updated `GraphRetriever.retrieve_subgraph()` to traverse incoming `MITIGATES` and `ATTRIBUTED_TO` edges when mitigation/attribution intent is present.
+- Filtered generic lowercase nouns (`malware`, `vulnerability`, `technique`, `mitigation`) from noisy entity extraction in `QueryAnalyzer`.
+
 ## [1.4.0] - 2026-11-25
 
 ### Added (Audit Remediation — Phase 2: Official Data & Real Cypher Traversal)

@@ -73,9 +73,11 @@ class QueryAnalyzer:
             tl = t.lower()
             generic_single_nouns = {
                 "and", "the", "for", "with", "use", "uses", "team", "group", "actor", "system", "data",
-                "tool", "tools", "botnet", "server", "email", "file", "files", "script", "account",
+                "tool", "tools", "malware", "botnet", "server", "email", "file", "files", "script", "account",
                 "accounts", "network", "service", "services", "domain", "channel", "software", "browser",
                 "process", "proxy", "remote", "share", "registry", "at", "net", "reg", "sc",
+                "vulnerability", "vulnerabilities", "technique", "techniques", "mitigation", "mitigations",
+                "campaign", "campaigns", "resource", "infrastructure", "exploit", "exploits",
             }
             if " " not in tl and tl in generic_single_nouns:
                 return

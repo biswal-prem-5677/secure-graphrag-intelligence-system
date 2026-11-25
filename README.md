@@ -135,19 +135,36 @@ python scripts/demo_investigation.py --interactive
 
 ---
 
-## Comparative Benchmark: Secure GraphRAG vs. Plain Vector-RAG
+## Comparative Benchmark: Secure GraphRAG vs. BM25 & Dense Vector-RAG
 
-Evaluates multi-hop retrieval and grounded reasoning across **105 threat intelligence tasks** (`evaluation/datasets/mitre_multihop_100.jsonl`) traversing 2-hop to 4-hop actor-tool-technique chains and adversarial ungrounded refusal probes.
+Evaluates multi-hop retrieval and grounded reasoning across **220 programmatically generated tasks** derived directly from the Official MITRE ATT&CK® Enterprise v20.1 graph (`80` dev in `attack_v20_1_dev.jsonl`, `140` frozen held-out test in `attack_v20_1_test.jsonl`) spanning 2-hop, 3-hop, set-intersection, and unanswerable refusal probes.
 
-Both pipelines are benchmarked head-to-head on the same question set:
-- **Secure GraphRAG**: Cypher-based graph retrieval with topological path discovery and atomic claim verification.
-- **Plain Vector-RAG Baseline**: Lexical BM25 chunk retrieval over threat intelligence documents with answer synthesis verified by the same claim verification engine.
+All three systems use **one shared exact canonical matcher** and the **same empirical ClaimVerifier**:
+- **Secure GraphRAG**: Directed multi-hop traversal over STIX 2.1 topology (`GraphRetriever`).
+- **Plain BM25 Chunk RAG**: Okapi BM25 lexical top-5 retrieval over chunked ATT&CK documents.
+- **Dense LSA Vector-RAG**: Dense 128-dim SVD cosine vector search over TF-IDF n-grams.
 
 ```bash
-python evaluation/runners/run_vector_baseline.py
+python evaluation/runners/run_vector_baseline.py --split test
+python scripts/sync_readme_metrics.py
 ```
 
 Outputs are isolated per run under `evaluation/results/runs/<run_id>/` and summarized in [`evaluation/results/baseline_comparison.md`](evaluation/results/baseline_comparison.md). Detailed scoring definitions are available in [`docs/METRICS.md`](docs/METRICS.md).
+
+<!-- BENCHMARK_TABLE_START -->
+> Auto-generated from [`evaluation/results/baseline_comparison.json`](evaluation/results/baseline_comparison.json) | Dataset: `evaluation/datasets/attack_v20_1_test.jsonl` (140 held-out tasks, `sha256:3c713a8a43816407`) | Knowledge Graph: Official MITRE ATT&CK® Enterprise v20.1 (1827 nodes, 20957 edges)
+
+| Canonical Metric | Secure GraphRAG | Plain BM25 Chunk RAG | Dense LSA Vector-RAG |
+| :--- | :---: | :---: | :---: |
+| **Retrieval Recall@K (95% CI)** | **68.7%** [62.7–74.6%] | 8.5% [5.1–12.3%] | 2.3% [1.2–3.6%] |
+| **2-Hop Recall (`Actor → SW → Tech`)** | **63.0%** | 3.7% | 3.0% |
+| **3-Hop Recall (`Actor → SW → Tech ← Mit`)** | **60.8%** | 0.0% | 0.0% |
+| **Set Intersection Recall** | **94.8%** | 34.2% | 5.6% |
+| **Task Completion Rate** | **56.4%** | 8.5% | 0.9% |
+| **Generation Faithfulness (Answered)** | 0.80 | 1.00 | 1.00 |
+| **Refusal F1 (Ungrounded Queries)** | **0.93** | 0.00 | 0.00 |
+| **Latency P95** | 262.6 ms | 356.5 ms | 20.6 ms |
+<!-- BENCHMARK_TABLE_END -->
 
 ---
 

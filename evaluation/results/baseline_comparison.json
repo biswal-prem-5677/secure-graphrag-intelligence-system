@@ -1,40 +1,81 @@
 {
   "metadata": {
-    "timestamp": "2026-11-25T05:46:39.107949+00:00",
-    "total_tasks": 105,
-    "answered_tasks_graphrag": 67,
-    "answered_tasks_vector_rag": 95,
-    "benchmark_dataset": "evaluation/datasets/mitre_multihop_100.jsonl",
-    "graph_nodes_available": 126,
-    "graph_edges_available": 99,
-    "evidence_records_available": 15
+    "timestamp": "2026-11-25T12:07:41.779224+00:00",
+    "git_sha": "f66503f",
+    "split": "test",
+    "dataset": "evaluation/datasets/attack_v20_1_test.jsonl",
+    "dataset_sha256": "3c713a8a43816407",
+    "total_tasks": 140,
+    "attack_version": "20.1",
+    "attack_sha256": "539a843a7b53ed9749740b2123dddae3726b1a4831841c32aca740b011b910b5",
+    "graph_nodes": 1827,
+    "graph_edges": 20957,
+    "seed": 42
   },
   "graphrag_metrics": {
-    "retrieval_recall_at_k": 0.673,
-    "task_completion_rate": 0.524,
-    "generation_faithfulness": 0.851,
-    "hallucination_rate": 0.149,
-    "refusal_precision": 0.125,
-    "refusal_recall": 0.4,
-    "refusal_f1": 0.19,
-    "latency_p50_ms": 24.5,
-    "latency_p95_ms": 83.2
-  },
-  "vector_rag_baseline_metrics": {
-    "retrieval_recall_at_k": 0.565,
-    "task_completion_rate": 0.39,
-    "generation_faithfulness": 1.0,
-    "hallucination_rate": 0.0,
+    "system": "Secure GraphRAG",
+    "retrieval_recall_at_k": 0.687,
+    "retrieval_recall_95ci": [
+      0.627,
+      0.746
+    ],
+    "task_completion_rate": 0.564,
+    "generation_faithfulness": 0.795,
+    "hallucination_rate": 0.205,
     "refusal_precision": 1.0,
-    "refusal_recall": 1.0,
-    "refusal_f1": 1.0,
-    "latency_p50_ms": 2.7,
-    "latency_p95_ms": 16.8
+    "refusal_recall": 0.87,
+    "refusal_f1": 0.93,
+    "latency_p50_ms": 134.2,
+    "latency_p95_ms": 262.6,
+    "by_category_recall": {
+      "three_hop_actor_sw_tech_mit": 0.608,
+      "two_hop_actor_sw_tech": 0.63,
+      "set_intersection": 0.948,
+      "unanswerable_refusal": 0.87
+    }
   },
-  "comparative_advantage": {
-    "retrieval_recall_delta": "+10.8%",
-    "task_completion_delta": "+13.3%",
-    "faithfulness_delta": "-14.9%",
-    "refusal_f1_delta": "-81.0%"
+  "bm25_baseline_metrics": {
+    "system": "Plain BM25 Chunk RAG",
+    "retrieval_recall_at_k": 0.085,
+    "retrieval_recall_95ci": [
+      0.051,
+      0.123
+    ],
+    "task_completion_rate": 0.085,
+    "generation_faithfulness": 0.997,
+    "hallucination_rate": 0.003,
+    "refusal_precision": 1.0,
+    "refusal_recall": 0.0,
+    "refusal_f1": 0.0,
+    "latency_p50_ms": 175.7,
+    "latency_p95_ms": 356.5,
+    "by_category_recall": {
+      "three_hop_actor_sw_tech_mit": 0.0,
+      "two_hop_actor_sw_tech": 0.037,
+      "set_intersection": 0.342,
+      "unanswerable_refusal": 0.0
+    }
+  },
+  "dense_vector_baseline_metrics": {
+    "system": "Dense LSA Vector-RAG",
+    "retrieval_recall_at_k": 0.023,
+    "retrieval_recall_95ci": [
+      0.012,
+      0.036
+    ],
+    "task_completion_rate": 0.009,
+    "generation_faithfulness": 0.999,
+    "hallucination_rate": 0.001,
+    "refusal_precision": 1.0,
+    "refusal_recall": 0.0,
+    "refusal_f1": 0.0,
+    "latency_p50_ms": 9.9,
+    "latency_p95_ms": 20.6,
+    "by_category_recall": {
+      "three_hop_actor_sw_tech_mit": 0.0,
+      "two_hop_actor_sw_tech": 0.03,
+      "set_intersection": 0.056,
+      "unanswerable_refusal": 0.0
+    }
   }
 }

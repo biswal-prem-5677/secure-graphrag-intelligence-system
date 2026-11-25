@@ -313,8 +313,8 @@ class GraphRetriever:
         entity_names: List[str],
         max_depth: int = 2,
         intended_rels: Optional[List[str]] = None,
-        max_paths: int = 50,
-        hub_degree_cap: int = 15,
+        max_paths: int = 80,
+        hub_degree_cap: int = 25,
     ) -> RetrievalResult:
         """
         Execute bounded, typed, directed multi-hop graph traversal from resolved seed entities.
@@ -410,11 +410,18 @@ class GraphRetriever:
                     if curr_d >= depth:
                         continue
 
-                    # Collect outgoing directed edges; include incoming only at hop 0 if outgoing degree is 0
-                    # (e.g. querying a Vulnerability/Technique/Mitigation to see what actors/malware target/use it)
+                    # Collect outgoing directed edges; include incoming edges when querying a target node
+                    # at hop 0 or when resolving MITIGATES/ATTRIBUTED_TO into Technique/ThreatActor
                     candidate_edges = list(g.out_edges(curr_id, keys=True, data=True))
                     if curr_d == 0 and len(candidate_edges) == 0:
                         candidate_edges = [(u, v, k, d) for u, v, k, d in g.in_edges(curr_id, keys=True, data=True)]
+                    elif allowed_rels and ("MITIGATES" in allowed_rels or "ATTRIBUTED_TO" in allowed_rels):
+                        in_mit = [
+                            (u, v, k, d)
+                            for u, v, k, d in g.in_edges(curr_id, keys=True, data=True)
+                            if k in ("MITIGATES", "ATTRIBUTED_TO")
+                        ]
+                        candidate_edges.extend(in_mit)
 
                     # Sort by edge confidence descending and enforce hub-degree cap
                     candidate_edges.sort(
