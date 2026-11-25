@@ -110,11 +110,11 @@ def seed_default_users(force: bool = False) -> None:
         return
 
     import uuid
-    admin_pw = settings.DEFAULT_ADMIN_PASSWORD or "SecureAdmin2024!"
-    user_pw = settings.DEFAULT_USER_PASSWORD or "SecureAnalyst2024!"
+    admin_pw = settings.DEFAULT_ADMIN_PASSWORD
+    user_pw = settings.DEFAULT_USER_PASSWORD
 
     try:
-        if not user_store.user_exists("admin"):
+        if admin_pw and not user_store.user_exists("admin"):
             user_store.add_user(
                 User(
                     id=str(uuid.uuid4()),
@@ -126,7 +126,7 @@ def seed_default_users(force: bool = False) -> None:
             )
             logger.info("default_admin_created")
 
-        if not user_store.user_exists("analyst"):
+        if user_pw and not user_store.user_exists("analyst"):
             user_store.add_user(
                 User(
                     id=str(uuid.uuid4()),
@@ -137,25 +137,9 @@ def seed_default_users(force: bool = False) -> None:
                 )
             )
             logger.info("default_user_created")
-
-        if not user_store.user_exists("eval_user"):
-            user_store.add_user(
-                User(
-                    id=str(uuid.uuid4()),
-                    username="eval_user",
-                    role=UserRole.analyst,
-                    hashed_password=hash_password("SecureEval2024!"),
-                    disabled=False,
-                )
-            )
-            logger.info("default_eval_user_created")
     except Exception as e:
         logger.warning("seed_default_users_failed", error=str(e))
 
 
-# Seed on import if database is available
-try:
-    seed_default_users()
-except Exception:
-    pass
+
 

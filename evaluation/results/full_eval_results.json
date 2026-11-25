@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "timestamp": "2026-11-24T06:59:18.657798+00:00",
+    "timestamp": "2026-11-25T05:44:23.419093+00:00",
     "provider_mode": "DETERMINISTIC MOCK EVALUATION",
     "real_llm_status": "NOT VERIFIED (Requires External API Keys: GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY)",
     "graph_mode": "IN-MEMORY CANONICAL THREAT GRAPH"

@@ -78,9 +78,23 @@ def render_response(resp):
 
 
 async def run_demo():
+    import secrets
+    import uuid
+    from app.models.user import User, UserRole, user_store
+    from app.security.auth import hash_password
+
     print_banner()
     init_db()
-    seed_default_users(force=True)
+    if not user_store.user_exists("eval_user"):
+        user_store.add_user(
+            User(
+                id=str(uuid.uuid4()),
+                username="eval_user",
+                role=UserRole.admin,
+                hashed_password=hash_password(secrets.token_urlsafe(16)),
+                disabled=False,
+            )
+        )
     query_service = QueryService()
 
     demo_cases = [

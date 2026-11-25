@@ -39,33 +39,6 @@ def _resolve_user_id(user_identifier: str, db: Session) -> str:
     if user:
         return user.id
 
-    # In development/testing/eval environments, automatically seed known default/eval accounts if missing
-    if user_identifier in ("analyst", "admin", "eval_user", "eval_runner", "default"):
-        from app.core.config import settings
-        if getattr(settings, "ENVIRONMENT", "development") != "production":
-            try:
-                new_uid = str(uuid.uuid4())
-                new_user = DBUser(
-                    id=new_uid,
-                    username=user_identifier,
-                    email=f"{user_identifier}@local.internal",
-                    hashed_password="disabled_eval_password",
-                    role="admin" if user_identifier == "admin" else "analyst",
-                    disabled=False,
-                )
-                db.add(new_user)
-                db.commit()
-                return new_uid
-            except Exception:
-                db.rollback()
-                existing = (
-                    db.query(DBUser)
-                    .filter((DBUser.id == user_identifier) | (DBUser.username == user_identifier))
-                    .first()
-                )
-                if existing:
-                    return existing.id
-
     return user_identifier
 
 

@@ -137,39 +137,36 @@ python scripts/demo_investigation.py --interactive
 
 ## Comparative Benchmark: Secure GraphRAG vs. Plain Vector-RAG
 
-Evaluated across **105 multi-hop threat intelligence tasks** (`evaluation/datasets/mitre_multihop_100.jsonl`) traversing 2-hop to 4-hop actor-tool-technique chains and adversarial ungrounded refusal probes:
+Evaluates multi-hop retrieval and grounded reasoning across **105 threat intelligence tasks** (`evaluation/datasets/mitre_multihop_100.jsonl`) traversing 2-hop to 4-hop actor-tool-technique chains and adversarial ungrounded refusal probes.
+
+Both pipelines are benchmarked head-to-head on the same question set:
+- **Secure GraphRAG**: Cypher-based graph retrieval with topological path discovery and atomic claim verification.
+- **Plain Vector-RAG Baseline**: Lexical BM25 chunk retrieval over threat intelligence documents with answer synthesis verified by the same claim verification engine.
 
 ```bash
 python evaluation/runners/run_vector_baseline.py
 ```
 
-| Evaluation Metric | Secure GraphRAG | Plain Vector-RAG Baseline | Delta / Advantage |
-| :--- | :---: | :---: | :---: |
-| **Multi-Hop Entity Recall** | **67.3%** | 56.5% | **+10.8%** |
-| **Task Completion Rate** | **99.0%** | 39.0% | **+60.0%** |
-| **Mean Faithfulness Score** | **0.89** | 0.53 | **+35.7%** |
-| **Hallucination Rate** | **11.4%** | 47.1% | **-35.7%** |
-| **Latency P50** | 21.6 ms | 3.4 ms | High-throughput |
-| **Latency P95** | 160.7 ms | 23.4 ms | Sub-second |
-
-> Detailed findings, error analysis, and methodology are committed in [`evaluation/results/evaluation_results.md`](evaluation/results/evaluation_results.md).
+Outputs are isolated per run under `evaluation/results/runs/<run_id>/` and summarized in [`evaluation/results/baseline_comparison.md`](evaluation/results/baseline_comparison.md). Detailed scoring definitions are available in [`docs/METRICS.md`](docs/METRICS.md).
 
 ---
 
-## Evaluation Suite (M1–M5)
+## Evaluation Suite
 
-Run the deep automated evaluation benchmark:
+Run the automated evaluation benchmark:
 ```bash
 python evaluation/runners/run_full_eval.py
 ```
 
-| Metric | Name | Target | Description |
+| Canonical Metric | Code Identifier | Target | Scope |
 |---|---|---|---|
-| **M1** | Retrieval Precision | > 85% | Entity and path recovery accuracy across ground truth tasks |
-| **M2** | Generation Faithfulness | > 90% | Percentage of generated claims grounded in retrieved graph context |
-| **M3** | Confidence Calibration | < 0.15 | Brier calibration score comparing model confidence vs correctness |
-| **M4** | Latency P95 | < 2500ms | 95th percentile end-to-end response time under load |
-| **M5** | Cost Per Task | < $0.005 | Average token and inference expenditure per resolved query |
+| **Retrieval Recall@K** | `retrieval_recall_at_k` | $\ge 85\%$ | Entity & path recovery accuracy |
+| **Generation Faithfulness** | `generation_faithfulness` | $\ge 90\%$ | Claims supported by graph context (answered queries) |
+| **Hallucination Rate** | `hallucination_rate` | $\le 10\%$ | Claims unsupported by evidence ($1.0 - \text{faithfulness}$) |
+| **Refusal F1 Score** | `refusal_f1` | $\ge 92\%$ | Accuracy on unanswerable/adversarial queries |
+| **Confidence Calibration** | `calibration_error_brier` | $< 0.15$ | Brier calibration score vs correctness |
+| **Latency P95** | `latency_p95_ms` | $< 2500\text{ms}$ | 95th percentile response time under load |
+| **Cost Per Query** | `cost_per_query_usd` | $< \$0.005$ | Average inference expenditure per query |
 
 ---
 
@@ -201,6 +198,8 @@ locust -f load_tests/locustfile.py --headless -u 20 -r 5 -t 1m --host http://loc
 
 - [REST API Reference](docs/API.md)
 - [System Architecture & Design](docs/ARCHITECTURE.md)
+- [Metrics Specification & Evaluation Standards](docs/METRICS.md)
+- [System Limitations & Known Boundaries](docs/LIMITATIONS.md)
 - [Evaluation & Benchmark Methodology](docs/EVALUATION.md)
 - [Security Policy & Vulnerability Reporting](SECURITY.md)
 - [Changelog](CHANGELOG.md)

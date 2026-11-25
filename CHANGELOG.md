@@ -2,6 +2,21 @@
 
 All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are documented in this file.
 
+## [1.3.1] - 2026-11-25
+
+### Changed (Audit Remediation — Phase 1)
+- **Empirical Evaluation Integrity**:
+  - Removed all formulaic baseline scoring heuristics (`max(0.20, recall * 0.85)`) from `evaluation/runners/run_vector_baseline.py`. Plain Vector-RAG answers are now evaluated directly through `ClaimVerifier.verify_answer()`.
+  - Isolated evaluation artifacts per run into `evaluation/results/runs/<run_id>/` and separated canonical files (`full_eval_results.json` vs `baseline_comparison.json` / `baseline_comparison.md`) so runs no longer overwrite each other.
+  - Separated refusal evaluation (`refusal_precision`, `refusal_recall`, `refusal_f1`) from answered-query faithfulness in `ClaimVerificationResult.is_refusal` and `run_vector_baseline.py` so refusals do not inflate faithfulness scores.
+- **Credential & Identity Hygiene**:
+  - Removed all hardcoded default password literals from `backend/app/security/auth.py` and `backend/app/core/config.py`.
+  - Removed import-time database user seeding side-effects in `security/auth.py` and silent user auto-creation side-effects in `db/repository.py`.
+  - Added explicit admin onboarding CLI utility `backend/app/cli.py` (`python -m app.cli create-admin`).
+- **Metrics & Limitations Transparency**:
+  - Created `docs/METRICS.md` establishing canonical metric definitions (`retrieval_recall_at_k`, `generation_faithfulness`, `refusal_f1`, etc.).
+  - Created `docs/LIMITATIONS.md` disclosing current graph traversal, NLI verification, and deterministic mock limitations.
+
 ## [1.3.0] - 2026-11-24
 
 ### Added
@@ -11,8 +26,7 @@ All notable changes to the **Secure GraphRAG Knowledge Intelligence System** are
   - Enhanced `GraphRetriever` to dynamically resolve both canonical test fixtures and MITRE ATT&CK entities seamlessly.
 - **105-Query Multi-Hop Benchmark & Comparative Plain Vector-RAG Baseline**:
   - Curated `evaluation/datasets/mitre_multihop_100.jsonl` with 105 multi-hop threat intelligence tasks across 2-hop, 3-hop, 4-hop actor-tool-technique chains, and adversarial ungrounded refusal probes.
-  - Implemented and executed `evaluation/runners/run_vector_baseline.py` comparing Secure GraphRAG against a plain Vector-RAG baseline (TF-IDF/BM25 over chunked CTI corpus).
-  - Committed verified benchmark output to `evaluation/results/evaluation_results.json` and `evaluation/results/evaluation_results.md` showing GraphRAG achieving **67.3% multi-hop recall** vs **56.5% for vector search (+10.8% advantage)** and **0.89 faithfulness** vs **0.53 (+35.7% advantage)**.
+  - Implemented `evaluation/runners/run_vector_baseline.py` comparing Secure GraphRAG against a plain BM25 Vector-RAG baseline.
 - **Interactive Live Investigation Demo CLI**:
   - Created `scripts/demo_investigation.py` showcasing end-to-end multi-hop graph traversal, cross-campaign lateral movement analysis, and anti-hallucination guardrails with interactive investigation query support.
 - **Hand-Labeled Claim Verifier Benchmark**:

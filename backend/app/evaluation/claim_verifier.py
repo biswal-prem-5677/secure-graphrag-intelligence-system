@@ -24,6 +24,7 @@ class ClaimVerificationResult(BaseModel):
     grounding_score: float = 1.0
     hallucination_rate: float = 0.0
     is_fully_grounded: bool = True
+    is_refusal: bool = False
     sanitized_answer: str = ""
 
 
@@ -330,7 +331,7 @@ class ClaimVerifier:
         if (
             "insufficient evidence" in answer.lower()
             or "could not establish" in answer.lower()
-            or not graph_data.nodes
+            or (not graph_data.nodes and not evidence_records)
         ):
             return ClaimVerificationResult(
                 total_claims=1,
@@ -341,6 +342,7 @@ class ClaimVerifier:
                 grounding_score=1.0,
                 hallucination_rate=0.0,
                 is_fully_grounded=True,
+                is_refusal=True,
                 sanitized_answer=answer,
             )
 

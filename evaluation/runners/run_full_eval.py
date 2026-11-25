@@ -25,10 +25,24 @@ async def run_full_evaluation() -> dict:
     print("=================================================================")
 
     # Ensure database tables and test accounts exist for clean clone runs
+    import secrets
+    import uuid
     from app.db.database import init_db
-    from app.security.auth import seed_default_users
+    from app.models.user import User, UserRole, user_store
+    from app.security.auth import hash_password
+
     init_db()
-    seed_default_users(force=True)
+    for uname, urole in [("eval_user", UserRole.admin), ("analyst", UserRole.analyst)]:
+        if not user_store.user_exists(uname):
+            user_store.add_user(
+                User(
+                    id=str(uuid.uuid4()),
+                    username=uname,
+                    role=urole,
+                    hashed_password=hash_password(secrets.token_urlsafe(16)),
+                    disabled=False,
+                )
+            )
 
     task_metrics = await run_task_evaluation()
     retrieval_metrics = await run_retrieval_evaluation()
@@ -56,12 +70,22 @@ async def run_full_evaluation() -> dict:
         },
     }
 
-    out_path = root / "evaluation" / "results" / "evaluation_results.json"
+    # Isolate run results into timestamped directory and update canonical full_eval_results.json
+    run_id = f"full_eval_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_dir = root / "evaluation" / "results" / "runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(run_dir / "metrics.json", "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+
+    out_path = root / "evaluation" / "results" / "full_eval_results.json"
     os.makedirs(out_path.parent, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
 
-    print(f"  EVALUATION COMPLETE. Report written to {out_path}")
+    print(f"  EVALUATION COMPLETE.")
+    print(f"  Run Artifacts: {run_dir}")
+    print(f"  Canonical Summary: {out_path}")
     return report
 
 

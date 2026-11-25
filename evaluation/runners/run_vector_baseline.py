@@ -24,8 +24,7 @@ sys.path.insert(0, str(root))
 from app.db.database import init_db
 from app.evaluation.claim_verifier import claim_verifier
 from app.retrieval.graph_retriever import graph_retriever
-from app.schemas.schemas import QueryRequest, TaskCompletionStatus
-from app.security.auth import seed_default_users
+from app.schemas.schemas import EvidenceRecord, GraphData, OperationalState, QueryRequest, TaskCompletionStatus
 from app.services.query_service import query_service
 
 
@@ -92,9 +91,23 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
     print(f"  Benchmark Suite: 105 Multi-Hop Threat Intelligence Tasks")
     print("=========================================================================")
 
-    # Ensure database tables and test accounts exist
+    # Ensure database tables and eval user exist for clean clone runs
+    import secrets
+    import uuid
+    from app.models.user import User, UserRole, user_store
+    from app.security.auth import hash_password
+
     init_db()
-    seed_default_users(force=True)
+    if not user_store.user_exists("eval_user"):
+        user_store.add_user(
+            User(
+                id=str(uuid.uuid4()),
+                username="eval_user",
+                role=UserRole.admin,
+                hashed_password=hash_password(secrets.token_urlsafe(16)),
+                disabled=False,
+            )
+        )
 
     # Load multi-hop evaluation dataset
     dataset_path = root / "evaluation" / "datasets" / "mitre_multihop_100.jsonl"
@@ -115,12 +128,14 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
     vectorrag_entity_recalls: List[float] = []
     graphrag_latencies: List[float] = []
     vectorrag_latencies: List[float] = []
-    graphrag_faithfulness: List[float] = []
-    vectorrag_faithfulness: List[float] = []
-    graphrag_hallucination: List[float] = []
-    vectorrag_hallucination: List[float] = []
+    graphrag_answered_faithfulness: List[float] = []
+    vectorrag_answered_faithfulness: List[float] = []
+    graphrag_answered_hallucination: List[float] = []
+    vectorrag_answered_hallucination: List[float] = []
     graphrag_completed_count = 0
     vectorrag_completed_count = 0
+    gr_refusal_tp = gr_refusal_fp = gr_refusal_fn = 0
+    vr_refusal_tp = vr_refusal_fp = vr_refusal_fn = 0
 
     print(f"Executing head-to-head evaluation across {len(tasks)} multi-hop tasks...\n")
 
@@ -156,12 +171,22 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
         else:
             gr_recall = 1.0
         graphrag_entity_recalls.append(gr_recall)
-        graphrag_faithfulness.append(gr_resp.faithfulness_score)
-        graphrag_hallucination.append(1.0 - gr_resp.faithfulness_score)
-        if gr_resp.task_status in (TaskCompletionStatus.TASK_COMPLETED, TaskCompletionStatus.COMPLETED):
+        gr_is_refusal = (gr_resp.operational_state == OperationalState.EMPTY_RETRIEVAL) or ("insufficient evidence" in gr_resp.answer.lower())
+        if is_refusal:
+            if gr_is_refusal:
+                gr_refusal_tp += 1
+            else:
+                gr_refusal_fn += 1
+        else:
+            if gr_is_refusal:
+                gr_refusal_fp += 1
+            else:
+                graphrag_answered_faithfulness.append(gr_resp.faithfulness_score)
+                graphrag_answered_hallucination.append(1.0 - gr_resp.faithfulness_score)
+        if not is_refusal and not gr_is_refusal and gr_recall >= 0.70 and gr_resp.faithfulness_score >= 0.70:
             graphrag_completed_count += 1
 
-        # 2. Execute Plain Vector-RAG Baseline
+        # 2. Execute Plain Vector-RAG Baseline (BM25 Chunk Retrieval + Empirical Verification)
         t0 = time.time()
         vr_chunks = vector_rag.retrieve(q, top_k=5)
         vr_time = (time.time() - t0) * 1000
@@ -175,19 +200,48 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
         )
         vectorrag_entity_recalls.append(vr_recall)
 
-        # Vector-RAG multi-hop penalty: without topology, isolated chunks hallucinate connections
-        if is_refusal:
-            vr_faith = 0.50 if vr_chunks else 1.0  # Vector search falsely retrieves irrelevant chunks on ungrounded queries
-            vr_halluc = 0.50 if vr_chunks else 0.0
-            vr_completed = False
-        else:
-            # On 3+ hops, Vector-RAG misses the intermediate bridge entities
-            vr_faith = round(max(0.20, vr_recall * 0.85), 2)
-            vr_halluc = round(1.0 - vr_faith, 2)
-            vr_completed = (vr_recall >= 0.70)
+        # Synthesize baseline answer from retrieved text chunks
+        vr_evidence = [
+            EvidenceRecord(
+                source_id=c["id"],
+                title=f"Chunk {c['id']}",
+                source_type="TextCorpus",
+                confidence=0.80,
+                summary=c["text"],
+            )
+            for c in vr_chunks
+        ]
 
-        vectorrag_faithfulness.append(vr_faith)
-        vectorrag_hallucination.append(vr_halluc)
+        if not vr_chunks or (is_refusal and vr_recall == 0.0):
+            vr_answer = "Insufficient evidence in the retrieved text corpus to answer this query."
+        else:
+            # Baseline generates answer from top retrieved text chunks
+            top_texts = [c["text"] for c in vr_chunks[:2]]
+            vr_answer = f"Based on retrieved documentation: {' '.join(top_texts)}"
+
+        # Empirically verify baseline answer with claim verifier (no synthetic formulas)
+        vr_verif = claim_verifier.verify_answer(
+            answer=vr_answer,
+            graph_data=GraphData(),
+            relationship_paths=[],
+            evidence_records=vr_evidence,
+        )
+
+        vr_faith = vr_verif.faithfulness_score
+        vr_halluc = vr_verif.hallucination_rate
+        vr_is_refusal = vr_verif.is_refusal
+        if is_refusal:
+            if vr_is_refusal:
+                vr_refusal_tp += 1
+            else:
+                vr_refusal_fn += 1
+        else:
+            if vr_is_refusal:
+                vr_refusal_fp += 1
+            else:
+                vectorrag_answered_faithfulness.append(vr_faith)
+                vectorrag_answered_hallucination.append(vr_halluc)
+        vr_completed = (not is_refusal) and (not vr_is_refusal) and (vr_recall >= 0.70) and (vr_faith >= 0.70)
         if vr_completed:
             vectorrag_completed_count += 1
 
@@ -201,83 +255,115 @@ async def run_comparative_benchmark(max_tasks: int = 105) -> Dict[str, Any]:
         k = int(0.95 * len(s))
         return s[min(k, len(s) - 1)]
 
+    def calc_f1(tp: int, fp: int, fn: int) -> Tuple[float, float, float]:
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 1.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 1.0
+        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+        return round(prec, 3), round(rec, 3), round(f1, 3)
+
+    gr_ref_p, gr_ref_r, gr_ref_f1 = calc_f1(gr_refusal_tp, gr_refusal_fp, gr_refusal_fn)
+    vr_ref_p, vr_ref_r, vr_ref_f1 = calc_f1(vr_refusal_tp, vr_refusal_fp, vr_refusal_fn)
+
+    gr_answered_faith = round(sum(graphrag_answered_faithfulness) / len(graphrag_answered_faithfulness), 3) if graphrag_answered_faithfulness else 0.0
+    gr_answered_halluc = round(sum(graphrag_answered_hallucination) / len(graphrag_answered_hallucination), 3) if graphrag_answered_hallucination else 0.0
+    vr_answered_faith = round(sum(vectorrag_answered_faithfulness) / len(vectorrag_answered_faithfulness), 3) if vectorrag_answered_faithfulness else 0.0
+    vr_answered_halluc = round(sum(vectorrag_answered_hallucination) / len(vectorrag_answered_hallucination), 3) if vectorrag_answered_hallucination else 0.0
+
     total = len(tasks)
+    gr_recall_mean = round(sum(graphrag_entity_recalls) / total, 3)
+    vr_recall_mean = round(sum(vectorrag_entity_recalls) / total, 3)
+
     summary = {
         "metadata": {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "total_tasks": total,
+            "answered_tasks_graphrag": len(graphrag_answered_faithfulness),
+            "answered_tasks_vector_rag": len(vectorrag_answered_faithfulness),
             "benchmark_dataset": "evaluation/datasets/mitre_multihop_100.jsonl",
             "graph_nodes_available": len(offline_data.get("nodes", [])),
             "graph_edges_available": len(offline_data.get("edges", [])),
             "evidence_records_available": len(offline_data.get("evidence", [])),
         },
         "graphrag_metrics": {
-            "multi_hop_recall": round(sum(graphrag_entity_recalls) / total, 3),
+            "retrieval_recall_at_k": gr_recall_mean,
             "task_completion_rate": round(graphrag_completed_count / total, 3),
-            "mean_faithfulness": round(sum(graphrag_faithfulness) / total, 3),
-            "mean_hallucination_rate": round(sum(graphrag_hallucination) / total, 3),
+            "generation_faithfulness": gr_answered_faith,
+            "hallucination_rate": gr_answered_halluc,
+            "refusal_precision": gr_ref_p,
+            "refusal_recall": gr_ref_r,
+            "refusal_f1": gr_ref_f1,
             "latency_p50_ms": round(sorted(graphrag_latencies)[total // 2], 1),
             "latency_p95_ms": round(p95(graphrag_latencies), 1),
         },
         "vector_rag_baseline_metrics": {
-            "multi_hop_recall": round(sum(vectorrag_entity_recalls) / total, 3),
+            "retrieval_recall_at_k": vr_recall_mean,
             "task_completion_rate": round(vectorrag_completed_count / total, 3),
-            "mean_faithfulness": round(sum(vectorrag_faithfulness) / total, 3),
-            "mean_hallucination_rate": round(sum(vectorrag_hallucination) / total, 3),
+            "generation_faithfulness": vr_answered_faith,
+            "hallucination_rate": vr_answered_halluc,
+            "refusal_precision": vr_ref_p,
+            "refusal_recall": vr_ref_r,
+            "refusal_f1": vr_ref_f1,
             "latency_p50_ms": round(sorted(vectorrag_latencies)[total // 2], 1),
             "latency_p95_ms": round(p95(vectorrag_latencies), 1),
         },
         "comparative_advantage": {
-            "multi_hop_recall_gain": f"+{round((sum(graphrag_entity_recalls) - sum(vectorrag_entity_recalls)) / total * 100, 1)}%",
-            "hallucination_reduction": f"-{round((sum(vectorrag_hallucination) - sum(graphrag_hallucination)) / total * 100, 1)}%",
-            "faithfulness_gain": f"+{round((sum(graphrag_faithfulness) - sum(vectorrag_faithfulness)) / total * 100, 1)}%",
+            "retrieval_recall_delta": f"{round((gr_recall_mean - vr_recall_mean) * 100, 1):+.1f}%",
+            "task_completion_delta": f"{round((graphrag_completed_count - vectorrag_completed_count) / total * 100, 1):+.1f}%",
+            "faithfulness_delta": f"{round((gr_answered_faith - vr_answered_faith) * 100, 1):+.1f}%",
+            "refusal_f1_delta": f"{round((gr_ref_f1 - vr_ref_f1) * 100, 1):+.1f}%",
         },
     }
 
-    # Write committed results JSON
-    results_json_path = root / "evaluation" / "results" / "evaluation_results.json"
-    results_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(results_json_path, "w", encoding="utf-8") as f:
+    # Isolate run results into timestamped directory and update baseline comparison report
+    run_id = f"baseline_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_dir = root / "evaluation" / "results" / "runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(run_dir / "metrics.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    canonical_json = root / "evaluation" / "results" / "baseline_comparison.json"
+    with open(canonical_json, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
     # Write committed results Markdown
-    results_md_path = root / "evaluation" / "results" / "evaluation_results.md"
+    results_md_path = run_dir / "report.md"
+    canonical_md = root / "evaluation" / "results" / "baseline_comparison.md"
     md_content = f"""# Secure GraphRAG vs. Vector-RAG Benchmark Evaluation Report
 
 **Execution Timestamp**: {summary['metadata']['timestamp']}  
-**Evaluation Set**: `{summary['metadata']['benchmark_dataset']}` ({total} multi-hop tasks)  
-**Knowledge Graph Base**: {summary['metadata']['graph_nodes_available']} nodes, {summary['metadata']['graph_edges_available']} edges, {summary['metadata']['evidence_records_available']} CTI evidence records (MITRE ATT&CK STIX 2.1).
+**Evaluation Set**: `{summary['metadata']['benchmark_dataset']}` ({total} tasks)  
+**Knowledge Graph Base**: {summary['metadata']['graph_nodes_available']} nodes, {summary['metadata']['graph_edges_available']} edges, {summary['metadata']['evidence_records_available']} CTI evidence records.
 
-## Executive Summary
+## Executive Summary (Empirical Verifier Output, Zero Synthetic Formulas)
 
-| Evaluation Metric | Secure GraphRAG | Plain Vector-RAG Baseline | Delta / Advantage |
+| Canonical Metric | Secure GraphRAG | Plain BM25 Vector-RAG | Delta |
 | :--- | :---: | :---: | :---: |
-| **Multi-Hop Entity Recall** | **{summary['graphrag_metrics']['multi_hop_recall'] * 100:.1f}%** | {summary['vector_rag_baseline_metrics']['multi_hop_recall'] * 100:.1f}% | **{summary['comparative_advantage']['multi_hop_recall_gain']}** |
-| **Task Completion Rate** | **{summary['graphrag_metrics']['task_completion_rate'] * 100:.1f}%** | {summary['vector_rag_baseline_metrics']['task_completion_rate'] * 100:.1f}% | **+{round((summary['graphrag_metrics']['task_completion_rate'] - summary['vector_rag_baseline_metrics']['task_completion_rate']) * 100, 1)}%** |
-| **Mean Faithfulness Score** | **{summary['graphrag_metrics']['mean_faithfulness']:.2f}** | {summary['vector_rag_baseline_metrics']['mean_faithfulness']:.2f} | **{summary['comparative_advantage']['faithfulness_gain']}** |
-| **Hallucination Rate** | **{summary['graphrag_metrics']['mean_hallucination_rate'] * 100:.1f}%** | {summary['vector_rag_baseline_metrics']['mean_hallucination_rate'] * 100:.1f}% | **{summary['comparative_advantage']['hallucination_reduction']}** |
+| **Retrieval Recall@K** | **{gr_recall_mean * 100:.1f}%** | {vr_recall_mean * 100:.1f}% | **{summary['comparative_advantage']['retrieval_recall_delta']}** |
+| **Task Completion Rate** | **{summary['graphrag_metrics']['task_completion_rate'] * 100:.1f}%** | {summary['vector_rag_baseline_metrics']['task_completion_rate'] * 100:.1f}% | **{summary['comparative_advantage']['task_completion_delta']}** |
+| **Generation Faithfulness (Answered)** | {gr_answered_faith:.2f} | {vr_answered_faith:.2f} | {summary['comparative_advantage']['faithfulness_delta']} |
+| **Hallucination Rate (Answered)** | {gr_answered_halluc * 100:.1f}% | {vr_answered_halluc * 100:.1f}% | — |
+| **Refusal F1 (Ungrounded Queries)** | **{gr_ref_f1:.2f}** | {vr_ref_f1:.2f} | **{summary['comparative_advantage']['refusal_f1_delta']}** |
 | **Latency P50** | {summary['graphrag_metrics']['latency_p50_ms']} ms | {summary['vector_rag_baseline_metrics']['latency_p50_ms']} ms | — |
 | **Latency P95** | {summary['graphrag_metrics']['latency_p95_ms']} ms | {summary['vector_rag_baseline_metrics']['latency_p95_ms']} ms | — |
 
-## Key Insights
+## Notes & Transparency
 
-1. **Why Plain Vector-RAG Fails on Multi-Hop Queries**:
-   - Plain vector similarity retrieval searches for semantic proximity to the initial question. When answering 3-hop questions (e.g. *ThreatActor -> Malware -> ATT&CK Technique -> Mitigation*), the target mitigation chunk shares almost no keyword overlap with the threat actor query.
-   - Vector-RAG retrieves chunks about the actor, but completely drops the 2nd and 3rd hop entities, resulting in **{summary['vector_rag_baseline_metrics']['multi_hop_recall'] * 100:.1f}% recall** and forcing the generator to hallucinate intermediate connections.
-2. **Graph Topology Traversal Superiority**:
-   - Secure GraphRAG traverses explicitly indexed Cypher relationships across the STIX 2.1 graph, discovering exact 2-hop to 4-hop pathways and citations, achieving **{summary['graphrag_metrics']['multi_hop_recall'] * 100:.1f}% multi-hop recall**.
-3. **Anti-Hallucination Claim Verifier**:
-   - By eliminating heuristic blacklists and validating entity presence and relational path connectivity, GraphRAG suppresses ungrounded assertions, reducing hallucination rates to **{summary['graphrag_metrics']['mean_hallucination_rate'] * 100:.1f}%**.
+- Refusals are evaluated separately via **Refusal F1** on the adversarial refusal subset and **excluded** from the answered faithfulness denominator (see `docs/METRICS.md`).
+- In verbatim chunk-quoting mode, plain BM25 text retrieval scores high faithfulness on its quoted snippet, but lower multi-hop **Retrieval Recall@K** (**{vr_recall_mean * 100:.1f}%** vs **{gr_recall_mean * 100:.1f}%**) because isolated lexical chunks omit intermediate bridge entities.
 """
     with open(results_md_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
+    with open(canonical_md, "w", encoding="utf-8") as f:
         f.write(md_content)
 
     print(f"\n=========================================================================")
     print(f"  BENCHMARK COMPLETE")
-    print(f"  Committed JSON Results: {results_json_path}")
-    print(f"  Committed Markdown Report: {results_md_path}")
-    print(f"  GraphRAG Multi-Hop Recall: {summary['graphrag_metrics']['multi_hop_recall'] * 100:.1f}% vs Vector-RAG: {summary['vector_rag_baseline_metrics']['multi_hop_recall'] * 100:.1f}%")
-    print(f"  GraphRAG Faithfulness: {summary['graphrag_metrics']['mean_faithfulness']:.2f} vs Vector-RAG: {summary['vector_rag_baseline_metrics']['mean_faithfulness']:.2f}")
+    print(f"  Run Artifacts: {run_dir}")
+    print(f"  Canonical Summary: {canonical_json}")
+    print(f"  Canonical Report: {canonical_md}")
+    print(f"  GraphRAG Recall@K: {gr_recall_mean * 100:.1f}% vs Vector-RAG: {vr_recall_mean * 100:.1f}%")
+    print(f"  GraphRAG Answered Faithfulness: {gr_answered_faith:.2f} | Refusal F1: {gr_ref_f1:.2f}")
     print("=========================================================================\n")
     return summary
 
